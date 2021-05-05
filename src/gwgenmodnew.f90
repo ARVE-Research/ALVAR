@@ -117,8 +117,6 @@ real(sp) :: precdiff1 = huge(sp)   ! stored value of the difference between inpu
 type(metvars_in)  :: met_in   ! structure containing one day of meteorology input to weathergen
 type(metvars_out) :: met_out  ! structure containing one day of meteorology output from weathergen
 
-type(randomstate), allocatable, dimension(:) :: rndst   ! random state for each gridcell
-
 type(metvars_out), dimension(31) :: month_met  ! buffer containing one month of simulated daily meteorology
 
 real(sp) :: mtmin_sim
@@ -153,29 +151,19 @@ nd => genvars%nd
 ! The randomstate generated in last month of the year (Dec) will be saved back into the module variable
 ! This will carry onto the next year iteration, until all calcyears are finished
 ! at which the random state will be re-initiated by the genrndstate() in modelmod after moving on to next gridcell
-met_in%rndst = georndst
+met_in%rndst = georndst(grid)
 
 !---------------------------------------------------------------------
 ! calculate derived climate variables
+
+! Correct for negative diurnal temperature range values (bad data in transient file???) (Leo Lai Apr 2021)
+dtr(:) = abs(dtr(:))
 
 mtmin = tmp(:) - 0.5 * dtr(:)
 mtmax = tmp(:) + 0.5 * dtr(:)
 wetf  = wet(:) / nd
 
 !--- Checking bad data (Leo)
-!
-! do k = 1,cntt
-!
-!   if(mtmin(k) < -273.15) then
-!
-!     write(0,*) 'Messed up min temp. at time slice', k, 'with', mtmin(k), 'degC'
-!     write(0,*) 'tmp: ', tmp(i,k) !, 'dtr: ', dtr(i,j,k)
-!     write(0,*) 'cnti:', i, 'cntt:', k
-!
-!   end if
-!
-! end do
-
 !--- Cycling bad data (Leo)
 
 baddata_check = 0
@@ -184,8 +172,8 @@ do k = 1, 20
 
   if(mtmin(k) < -273.15) then
 
-    mtmin(k) = 0.
-    mtmax(k) = 0.
+    mtmin(k) = (mtmin(k-1) + mtmin(k+1)) / 2
+    mtmax(k) = (mtmax(k-1) + mtmax(k+1)) / 2
 
     baddata_check = baddata_check + 1
 
@@ -218,7 +206,7 @@ met_out%resid = 0.
 start = 1     ! initiate index value for storing into dayvars
 
 ! start month loop
-! 13 iteration of month loop from Jan to Jan
+! 13 iteration of month loop from Jan to next year Jan
 ! Extra month (Jan) required for simulation of diurnal temperature, where 1st Jan tmin is needed for 31st Dec
 
 monthloop : do m = 1, 13
@@ -231,6 +219,14 @@ monthloop : do m = 1, 13
   call newspline_all(mtmaxbuf,ndbuf,tmax_sm(1:sum(ndbuf)))
   call newspline_all(cldbuf,ndbuf,cld_sm(1:sum(ndbuf)))
   call newspline_all(wndbuf,ndbuf,wnd_sm(1:sum(ndbuf)))
+
+  where (tmin_sm > tmax_sm)
+    tmax_sm = tmin_sm + 0.1
+  end where
+
+  do i = 1,sum(ndbuf)
+    if (tmin_sm(i) > tmax_sm(i)) print *, tmin_sm(i), tmax_sm(i)
+  end do
 
   ! calculcate start and end positons of the current month pseudo-daily buffer
 
@@ -394,6 +390,11 @@ monthloop : do m = 1, 13
   month_met(1:ndm)%cldf = roundto(month_met(1:ndm)%cldf,3)
   month_met(1:ndm)%wind = roundto(month_met(1:ndm)%wind,2)
 
+  ! months with very small DTR can lead to tmin > tmax at daily timestep (Leo Lai Apr 2021)
+  where (month_met%tmin > month_met%tmax)
+    month_met%tmax = month_met%tmin + 0.1
+  end where
+
   !-----------------------------------------------------------
   ! add the current monthly values on to the smoothing buffer
   ! write(0,*)cntt,t,w,t+w+1
@@ -421,7 +422,7 @@ end do monthloop ! month loop
 
 !-----------------------------------------------------------
 ! Save the randomstate from last output for next year iteration
-georndst = met_out%rndst
+georndst(grid) = met_out%rndst
 
 
 end subroutine gwgen_new

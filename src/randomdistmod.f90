@@ -50,7 +50,7 @@ type randomstate
 
 end type randomstate  !5+qsiz elements = 15 elements
 
-type(randomstate) :: georndst
+type(randomstate), allocatable, dimension(:) :: georndst
 
 contains
 
@@ -86,9 +86,9 @@ lat_loc = ll_loc(2)
 
 !---------------------
 
-call ran_seed(geohash(lon(lon_loc),lat(lat_loc)), georndst)    ! Get the geohash dependent randomstate
+call ran_seed(geohash(lon(lon_loc),lat(lat_loc)), georndst(grid))    ! Get the geohash dependent randomstate
 
-call ran_seed(ranu(georndst), georndst)     ! Randomize the geohash derived state
+call ran_seed(ranu(georndst(grid)), georndst(grid))     ! Randomize the geohash derived state
 
 
 end subroutine genrndstate

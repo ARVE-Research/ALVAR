@@ -306,6 +306,24 @@ allocate(dayvars(gridcount,ndyear+31))
 end subroutine initdayvars
 
 !-----------------------------------------------------------------------
+! Subroutine to allocate the dimension of georndst to the number of grids
+
+subroutine initgeorndst()
+
+use randomdistmod, only : georndst
+use metvarsmod,    only : cnt
+
+implicit none
+
+integer(i4) :: gridcount
+
+gridcount = cnt(1)
+
+allocate(georndst(gridcount))
+
+end subroutine initgeorndst
+
+!-----------------------------------------------------------------------
 
 subroutine saveclonlat(grid)
 
