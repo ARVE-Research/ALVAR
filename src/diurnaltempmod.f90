@@ -82,6 +82,15 @@ lat = gridlat(grid)
 call daylength(day-1, lat, dayl(1))
 call daylength(day, lat, dayl(2))
 
+! For seperating daytime and nighttime data points: (Leo Lai May 2019)
+! Define daylength of polar night to be 1 hour
+! Define daylength of polar day to be 23 hours
+if (dayl(1) >= daysec) dayl(1) = daysec - 3600.
+if (dayl(2) >= daysec) dayl(2) = daysec - 3600.
+
+if (dayl(1) < 3600.) dayl(1) = 3600.
+if (dayl(2) < 3600.) dayl(2) = 3600.
+
 !these are prep for other calculations below
 !tfollow = minimum temperature of the following day
 t0 = tmax - 0.39 * (tmax - tfollow)
@@ -100,16 +109,18 @@ sunrise_next = 12 - hdlnext
 !this gets the time of peak temperature
 peakt = 12. + 2. * hdl * tfpk
 
-if (dayl(1) <= 3600.) then
-  !FLAG this could be a bit of an ugly way of doing this... it could bias the weather to be mostly
-  !hot since the day (which is the longest) will be set to the max temp of the day. The main reason for
-  !this problem is that for gridded data we do not have the mean daily temp calced out in weathergen
-  !like we do for the max and min. Will think of better ways to do this -JM Oct 29 08
-      !FLAG check on this again after we fix weathergen JM Jan 10 09
-  tday = tmax
-  tnight = tmin
+! if (dayl(1) <= 3600.) then
+!   !FLAG this could be a bit of an ugly way of doing this... it could bias the weather to be mostly
+!   !hot since the day (which is the longest) will be set to the max temp of the day. The main reason for
+!   !this problem is that for gridded data we do not have the mean daily temp calced out in weathergen
+!   !like we do for the max and min. Will think of better ways to do this -JM Oct 29 08
+!       !FLAG check on this again after we fix weathergen JM Jan 10 09
+!   tday = tmax
+!   tnight = tmin
 
-else if (dayl(1) < daysec) then !daylength is less than 24 hours
+! if (dayl(1) == dayl(2) .AND. dayl(1) /= 0.) print *, dayl
+
+if (dayl(1) < daysec) then !daylength is less than 24 hours
 
         !has a night and a day, calculate night first
 
@@ -141,34 +152,37 @@ else if (dayl(1) < daysec) then !daylength is less than 24 hours
 
                     tday = (tam + tpm) / 2.
 
-          else
-
-                tday = tnight      !only night, day = night
+          ! else
+          !
+          !       tday = tnight      !only night, day = night
 
           end if
 
-else !no night, only day
-
-          !morning integral (ti is at sunrise, ti1 is at temperature peak time)
-          morn = sunrise - peakt
-
-          ti  = tmin * sunrise + 1. / pi * (2. * a * morn)
-          ti1 = tmin * peakt   + 1. / pi * (2. * a * morn * cos(pi / 2. * (sunrise - peakt) / morn))
-
-          tam = (ti1 - ti) / (-morn)
-
-          !afternoon integral (t10 is at temperature peak time, ti1 is at sundown)
-          ti  = t0 * peakt   - 1. / pi * 8. * r * cos(pi / 8. * (-4.))
-          ti1 = t0 * sundown - 1. / pi * 8. * r * cos(pi / 8. * (peakt - sundown - 4.))
-
-
-          tpm = (ti1 - ti) / (sundown - peakt)
-
-          tday = (tam + tpm) / 2.
-
-          tnight = tday
-
 end if
+
+! COMMENTED OUT BY Leo Lai (May 2019) because polar day and polar night is redefined above
+! else !no night, only day
+!
+!           !morning integral (ti is at sunrise, ti1 is at temperature peak time)
+!           morn = sunrise - peakt
+!
+!           ti  = tmin * sunrise + 1. / pi * (2. * a * morn)
+!           ti1 = tmin * peakt   + 1. / pi * (2. * a * morn * cos(pi / 2. * (sunrise - peakt) / morn))
+!
+!           tam = (ti1 - ti) / (-morn)
+!
+!           !afternoon integral (t10 is at temperature peak time, ti1 is at sundown)
+!           ti  = t0 * peakt   - 1. / pi * 8. * r * cos(pi / 8. * (-4.))
+!           ti1 = t0 * sundown - 1. / pi * 8. * r * cos(pi / 8. * (peakt - sundown - 4.))
+!
+!
+!           tpm = (ti1 - ti) / (sundown - peakt)
+!
+!           tday = (tam + tpm) / 2.
+!
+!           tnight = tday
+!
+! end if
 
 ! Calculate mean temperature from tday and tnight to stored into 'dayvars'
 tmean = tday * (dayl(1) / daysec) + tnight * ((daysec - dayl(1)) / daysec)
@@ -247,8 +261,8 @@ real(sp) :: prec    ! Annual rainfall in m
 real(sp) :: Lv    ! Latent heat of vaporization in J K-1
 real(sp) :: Pw    ! Water density in kg m-3
 real(sp) :: dSVP  ! Rate of change of saturation vapour pressure in Pa K-1
-real(sp) :: Ep    ! Potential evapotranspiration in kg m2 s-1
-real(sp) :: EF    ! Ratio of Ep to annual precipitation (m)
+real(dp) :: Ep    ! Potential evapotranspiration in kg m-2 s-1
+real(dp) :: EF    ! Ratio of Ep to annual precipitation (m)
 
 real(sp) :: ampl  ! Seasonal variation in daylength in hour
 real(sp) :: sunrise  ! Sunrise time
@@ -272,7 +286,7 @@ real(sp) :: Tw
 tmin = dayvars(grid,day)%tmin
 tmax = dayvars(grid,day)%tmax
 tavg = dayvars(grid,day)%tmean
-prec = sum(genvars%pre(5:16)) / 1000.   ! Annual rainfall in m
+prec = sum(genvars%pre(5:16)) / 1000.  ! Annual rainfall in m
 
 lon = gridlon(grid)
 lat = gridlat(grid)
@@ -284,41 +298,43 @@ dayl = dayvars(grid,day)%dayl * 3600.    ! daylength in seconds
 !---
 
 Lv = 1.91846 * (10**6) * (((tavg + 273.15) / (((tavg + 273.15) - 33.91))) ** 2 )    ! Henderson-Sellers (1984) in Davis et al. (2017)
-
+!
 Pw = 1000. * (1 - (((tavg - 3.9863) ** 2) / 508929.2) * ((tavg + 288.9414) / (tavg + 68.12963)))   ! Graf (2009)
+!
+Pw = 1000.
 
 tavg = tavg + 273.15
 
-! dSVP = 6.1078 * exp((17.269 * tavg) / (237.3 + tavg)) * ((237.3 + tavg) * 17.269 - 17.269 * tavg) / ((237.3 + tavg) ** 2)   ! Running & Coughlan (1988)
+dSVP = 6.1078 * exp((17.269 * tavg) / (237.3 + tavg)) * ((237.3 + tavg) * 17.269 - 17.269 * tavg) / ((237.3 + tavg) ** 2)   ! Running & Coughlan (1988)
+
+dSVP = 100. * dSVP     ! Convert mbar to Pa
 !
-! dSVP = 100. * dSVP     ! Convert mbar to Pa
-
-
-tavg = (tmin + tmax) / 2.
-
-dSVP = 0.6113 * exp(19.85356 - 5423. / tavg) * (5423. / (tavg ** 2))
-
-dSVP = 1000 * dSVP
-
-tavg = tavg - 273.15
-
-!-------------------------------
-
-! ampl = exp(7.42 + 0.045 * lat) / 3600.
 !
-! dayl = ampl * (sin((yearday - 79.)) * 0.01721) + 12.
-
-!-------------------------------
-
-Ma = (2. * pi) * (yearday - 4.) / 365.256363
-
-va = Ma + 0.0333988 * sin(Ma) + 0.0003486 * sin(2*Ma) + 0.0000050 * sin(3*Ma)
-
-Rd = 149.457 * (1 - 0.0167 ** 2) / (1 + 0.0167 * cos(va))
-
-!---
-
-dsol = 23.44 * cos(2.*pi * (yearday - 172.) / 365.)   ! Solar declination angle from Practical Meteorology Textbook
+! tavg = (tmin + tmax) / 2.
+!
+! dSVP = 0.6113 * exp(19.85356 - 5423. / tavg) * (5423. / (tavg ** 2))
+!
+! dSVP = 1000 * dSVP
+!
+! tavg = tavg - 273.15
+!
+! !-------------------------------
+!
+! ! ampl = exp(7.42 + 0.045 * lat) / 3600.
+! !
+! ! dayl = ampl * (sin((yearday - 79.)) * 0.01721) + 12.
+!
+! !-------------------------------
+!
+! Ma = (2. * pi) * (yearday - 4.) / 365.256363
+!
+! va = Ma + 0.0333988 * sin(Ma) + 0.0003486 * sin(2*Ma) + 0.0000050 * sin(3*Ma)
+!
+! Rd = 149.457 * (1 - 0.0167 ** 2) / (1 + 0.0167 * cos(va))
+!
+! !---
+!
+! dsol = 23.44 * cos(2.*pi * (yearday - 172.) / 365.)   ! Solar declination angle from Practical Meteorology Textbook
 
 !---
 
@@ -330,41 +346,41 @@ lon = lon * d2r   ! Convert to radian
 
 !---
 
-Rn = (-1.) * tan(lat) * tan(dsol)
-
-! Rn = min((pi / 180.), max((pi / (-180.)), Rn))
-
-Rn = acos(Rn)
-
-Rn = Rn * sin(lat) * sin(dsol) + cos(lat) * cos(dsol) * sin(Rn)   ! CHECKKKKKKKK
+! Rn = (-1.) * tan(lat) * tan(dsol)
 !
-Rn = (1361. / pi) * ((149.457 / Rd) ** 2) * Rn
+! ! Rn = min((pi / 180.), max((pi / (-180.)), Rn))
+!
+! Rn = acos(Rn)
+!
+! Rn = Rn * sin(lat) * sin(dsol) + cos(lat) * cos(dsol) * sin(Rn)   ! CHECKKKKKKKK
+! !
+! Rn = (1361. / pi) * ((149.457 / Rd) ** 2) * Rn
 
 ! print *, Rn, dayvars(day)%srad * 1000. / (3600. * 24)
 
 Rn = dayvars(grid,day)%srad * 1000. / (3600. * 24)
-
-!---
-
-sunrise = (24. / (2 * pi)) * ((-1.) * lon + acos((sin(lat) * sin(dsol)) / (cos(lat) * cos(dsol))))
-
-sunset = (24. / (2 * pi)) * ((-1.) * lon - acos((sin(lat) * sin(dsol)) / (cos(lat) * cos(dsol))))
-
-if (sunrise < 0.) sunrise = sunrise + 24
-
-if (sunset < 0.) sunset = sunset + 24
-
-! dayl = (max(sunrise,sunset) - min(sunrise,sunset)) * 3600.
-
-!---
-
+!
+! !---
+!
+! sunrise = (24. / (2 * pi)) * ((-1.) * lon + acos((sin(lat) * sin(dsol)) / (cos(lat) * cos(dsol))))
+!
+! sunset = (24. / (2 * pi)) * ((-1.) * lon - acos((sin(lat) * sin(dsol)) / (cos(lat) * cos(dsol))))
+!
+! if (sunrise < 0.) sunrise = sunrise + 24
+!
+! if (sunset < 0.) sunset = sunset + 24
+!
+! ! dayl = (max(sunrise,sunset) - min(sunrise,sunset)) * 3600.
+!
+! !---
+!
 Gn = 0.1 * Rn     ! Kimball et al. (1997) estimation of surface conductive energy flux
 
 !-------------------------------
 
-! Ep = (a * (dSVP / (dSVP + c)) * (Rn - Gn)) / Lv   ! Kimball et al. (1997)
+Ep = (a * (dSVP / (dSVP + c)) * (Rn - Gn)) / Lv   ! Kimball et al. (1997)
 
-Ep = dayvars(grid,day)%dpet / (3600. * 24.)
+! Ep = dayvars(grid,day)%dpet / (3600. * 24.)
 
 EF = ((Ep / Pw) * dayl) / prec     ! Kimball et al. (1997)
 
@@ -373,7 +389,7 @@ EF = ((Ep / Pw) * dayl) / prec     ! Kimball et al. (1997)
 !-------------------------------
 tmin = tmin + 273.15
 tmax = tmax + 273.15
-tavg = tavg + 273.15
+! tavg = tavg + 273.15
 
 Td = tmin * (-0.127 + 1.121 * (1.003 - 1.444 * EF + 12.312 * (EF**2) - 32.766 * (EF**3)) + 0.0006 * (tmax - tmin))    ! Kimball et al. (1997)
 
@@ -383,11 +399,13 @@ Td = tmin * (-0.127 + 1.121 * (1.003 - 1.444 * EF + 12.312 * (EF**2) - 32.766 * 
 
 Td = Td - 273.15
 
-RH = 100 * (EXP((17.625*Td)/(243.04+Td))/EXP((17.625*tavg)/(243.04+tavg)))
+if (Td < -1000.) print *, Ep, Pw, dayl, prec, EF, Td, tmin-273.15, tmax-273.15, tavg-273.15
 
-Tw = tavg * atan(0.151977 * sqrt(RH + 8.313659)) + atan(tavg + RH)            &
-     - atan(RH - 1.676331) + 0.00391838 * (RH ** 1.5) * atan(0.023101 * RH)   &
-     - 4.686035                 ! From Stull (2011) Wet-Bulb Temperature from Relative Humidity and Air Temperature
+! RH = 100 * (EXP((17.625*Td)/(243.04+Td))/EXP((17.625*tavg)/(243.04+tavg)))
+!
+! Tw = tavg * atan(0.151977 * sqrt(RH + 8.313659)) + atan(tavg + RH)            &
+!      - atan(RH - 1.676331) + 0.00391838 * (RH ** 1.5) * atan(0.023101 * RH)   &
+!      - 4.686035                 ! From Stull (2011) Wet-Bulb Temperature from Relative Humidity and Air Temperature
 
 
 dayvars(grid,day)%tdew = Td

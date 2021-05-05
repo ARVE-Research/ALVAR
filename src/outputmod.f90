@@ -302,6 +302,160 @@ ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
+!average daytime temperature
+
+ncstat = nf90_def_var(ofid,'tday',nf90_short,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily average daytimetemperature')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degC')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!average nighttime temperature
+
+ncstat = nf90_def_var(ofid,'tnight',nf90_short,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily average nighttime temperature')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degC')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!mean dewpoint temperature
+
+ncstat = nf90_def_var(ofid,'tdew',nf90_short,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily mean dewpoint temperature')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degC')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!daily mean relative humidity
+
+ncstat = nf90_def_var(ofid,'dayl',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daylength')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','h')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!Pjj
+
+ncstat = nf90_def_var(ofid,'vpd',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','vapor pressure deficit')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','Pa')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!daily mean relative humidity
+
+ncstat = nf90_def_var(ofid,'srad',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','downwelling surface shortwave radiation')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','kJ m-2 d-1')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!daily mean relative humidity
+
+ncstat = nf90_def_var(ofid,'rhum',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily mean relative humidity')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','%')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!daily PET
+
+ncstat = nf90_def_var(ofid,'dpet',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily potential evapotranspiration')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','mm d-1')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+
+!----
 
 ncstat = nf90_enddef(ofid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
@@ -377,6 +531,8 @@ if (year == 1 .AND. day == 1) then
             'tday ', &
             'tnight ', &
             'tdew ', &
+            'dayl ', &
+            'dsol ', &
             'rhum ', &
             'srad ', &
             'dpet ', &
@@ -396,6 +552,8 @@ print *,  info%plon, &
           dayvars(grid,day)%tday, &
           dayvars(grid,day)%tnight, &
           dayvars(grid,day)%tdew, &
+          dayvars(grid,day)%dayl, &
+          dayvars(grid,day)%dsol, &
           dayvars(grid,day)%rhum, &
           dayvars(grid,day)%srad, &
           dayvars(grid,day)%dpet, &

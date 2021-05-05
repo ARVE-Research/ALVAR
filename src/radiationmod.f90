@@ -196,12 +196,12 @@ integer :: i
 ! Get met variables for the day from module variable 'dayvars'
 lat = gridlat(grid)    ! assign latitude of the current gridcell
 
-! temp = 0.5 * (dayvars(dyr)%tmax + dayvars(dyr)%tmin)
+! temp = 0.5 * (dayvars(grid,dyr)%tmax + dayvars(grid,dyr)%tmin)
 temp = dayvars(grid,dyr)%tmean
 prec = dayvars(grid,dyr)%prec
 cldf = dayvars(grid,dyr)%cldf
 Pjj  = dayvars(grid,dyr)%Pjj
-tcm  = minval(genvars%tmp(4:15))    ! genvar structure with +/- 3 months buffer
+tcm  = minval(genvars%tmp(5:16))    ! genvar structure with +/- 4 months buffer
 
 call toa_insolation(orbit,dyr,lat,toa_sw,dayl,delta)
 
@@ -714,7 +714,7 @@ subroutine calcVPD(grid,dyr)
 ! Reference: Thornton et al. (2000) doi:10.1016/S0168-1923(00)00170-2
 
 use parametersmod, only : Tfreeze
-use metvarsmod,    only : dayvars
+use metvarsmod,    only : dayvars, gridlat
 
 implicit none
 
@@ -730,6 +730,9 @@ tday => dayvars(grid,dyr)%tday
 vpd  => dayvars(grid,dyr)%vpd
 
 vpd = esat(tday+Tfreeze) - esat(tmin+Tfreeze)
+
+! Adjust for small numerical difference between tday and tmin which leads to negative VPD
+if (vpd < 0.) vpd = 0.
 
 end subroutine calcVPD
 
