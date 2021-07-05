@@ -94,7 +94,7 @@ end type daymetvars
 
 integer, parameter, dimension(6) :: exponents = [0,1,2,3,4,5]
 
-real(sp), parameter :: p_trans = 5.   ! Threshold for transition from the gamma to gp distribution (mm)
+real(dp), parameter :: p_trans = 5.   ! Threshold for transition from the gamma to gp distribution (mm)
 
 ! coefficient to esimate the gamma scale parameter via
 ! g_scale = g_scale_coeff * mean_monthly_precip / number_of_wet_days
@@ -293,9 +293,9 @@ real(sp) :: pbar     ! mean amount of precipitation per wet day (mm)
 real(sp) :: pwet     ! probability that today will be wet
 real(sp) :: u        ! uniformly distributed random number (0-1)
 
-real(sp) :: g_shape
-real(sp) :: g_scale
-real(sp) :: gp_scale
+real(dp) :: g_shape
+real(dp) :: g_scale
+real(dp) :: gp_scale
 
 ! bias correction
 real(sp) :: slopecorr      ! slope correction for wind
@@ -415,18 +415,18 @@ if (wetf > 0. .and. pre > 0.) then
     g_scale = g_scale_coeff * pbar
     g_shape = pbar / g_scale
 
-    call gamma_cdf(p_trans,0.,g_scale,g_shape,cdf_thresh)
+    call gamma_cdf(p_trans,0.0_dp,g_scale,g_shape,cdf_thresh)
 
-    call gamma_pdf(p_trans,0.,g_scale,g_shape,pdf_thresh)
+    call gamma_pdf(p_trans,0.0_dp,g_scale,g_shape,pdf_thresh)
 
-    gp_scale = (1. - cdf_thresh) / pdf_thresh
+    gp_scale = (1.0_dp - cdf_thresh) / pdf_thresh
 
     i = 1
     do
 
       !today's precipitation
 
-      prec = ran_gamma_gp(rndst,.true.,g_shape,g_scale,p_trans,gp_shape,gp_scale)
+      prec = ran_gamma_gp(rndst,.true.,sngl(g_shape),sngl(g_scale),sngl(p_trans),gp_shape,sngl(gp_scale))
 
       !simulated precipitation should have no more precision than the input (0.1 mm day-1)
 
@@ -447,7 +447,7 @@ if (wetf > 0. .and. pre > 0.) then
 
     end do
 
-!     prec = roundto(prec,1)
+    prec = roundto(prec,1)
 
   else
 
@@ -522,6 +522,8 @@ wind = max(resid(4) * sqrt(wind_sd) + sqrt(wind_mn),0.)
 wind = roundto(wind**2,1)
 
 !-----------------------------------------------
+! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
+if (abs(resid(4)) < 1e-5) resid(4) = 0.
 
 slopecorr = sum(wind_slope_bias_coeffs * (max(wind_bias_min,min(wind_bias_max,resid(4)))**exponents))
 
@@ -639,6 +641,9 @@ if (pday) then  !calculate mean and SD for a wet day
 
   dm%cldf_mn = cldf_w1 / (cldf_w2 * cld + cldf_w3) + cldf_w4
 
+  ! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
+  if (abs(dm%wind_mn) < 1e-5) dm%wind_mn = 0.
+
   dm%wind_sd = sum(wind_sd_w * dm%wind_mn**exponents)
 
   dm%cldf_sd = cldf_sd_w * dm%cldf_mn * (1. - dm%cldf_mn)
@@ -652,6 +657,9 @@ else  !dry day
   dm%wind_mn = wind_d1 + wind_d2 * wind
 
   dm%cldf_mn = cldf_d1 / (cldf_d2 * cld + cldf_d3) + cldf_d4
+
+  ! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
+  if (abs(dm%wind_mn) < 1e-5) dm%wind_mn = 0.
 
   dm%wind_sd = sum(wind_sd_d * dm%wind_mn**exponents)
 
@@ -809,6 +817,9 @@ type(daymetvars), intent(inout) :: dm
 integer :: i
 
 !--------------------
+! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
+if (abs(dm%tmin_mn) < 1e-5) dm%tmin_mn = 0.
+if (abs(dm%tmax_mn) < 1e-5) dm%tmax_mn = 0.
 
 do i=1,4
 

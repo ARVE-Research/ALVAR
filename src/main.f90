@@ -223,8 +223,8 @@ call getarg(3,timestring)
 
 call parsecoords(timestring,timevals)
 
-startyr = timevals%minlon
-calcyrs = timevals%minlat
+startyr = nint(timevals%minlon)
+calcyrs = nint(timevals%minlat)
 
 t0 = 1 + 12 * (startyr - baseyr)
 t1 = t0 + 12 * calcyrs - 1
@@ -269,11 +269,11 @@ integer(i4)  , dimension(:), intent(in)    :: srt
 integer(i4)  , dimension(:), intent(in)    :: cnt
 integer(i1)  , dimension(:), intent(inout) :: ob
 
-integer :: len
-integer :: ilen
-integer :: alen
-integer :: n
-integer :: m
+integer(i4) :: len
+integer(i4) :: ilen
+integer(i4) :: alen
+integer(i4) :: n
+integer(i4) :: m
 
 ilen = sizeof(info)
 

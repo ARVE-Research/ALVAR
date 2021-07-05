@@ -365,6 +365,24 @@ ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
+!24 hour total precipitation
+
+ncstat = nf90_def_var(ofid,'prec',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily precipitation')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','mm d-1')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
 !daily mean relative humidity
 
 ncstat = nf90_def_var(ofid,'dayl',nf90_double,dimids(3:4),varid)
@@ -531,6 +549,7 @@ if (year == 1 .AND. day == 1) then
             'tday ', &
             'tnight ', &
             'tdew ', &
+            'prec ', &
             'dayl ', &
             'dsol ', &
             'rhum ', &
@@ -552,6 +571,7 @@ print *,  info%plon, &
           dayvars(grid,day)%tday, &
           dayvars(grid,day)%tnight, &
           dayvars(grid,day)%tdew, &
+          dayvars(grid,day)%prec, &
           dayvars(grid,day)%dayl, &
           dayvars(grid,day)%dsol, &
           dayvars(grid,day)%rhum, &

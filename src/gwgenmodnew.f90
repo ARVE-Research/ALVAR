@@ -60,27 +60,14 @@ real(sp), dimension(20) :: mtmin      ! maximum monthly temperature (degC)
 real(sp), dimension(20) :: mtmax      ! monthly minimum temperature (degC)
 real(sp), dimension(20) :: wetf       ! fraction of wet days in a month
 
-! output variable
-
-real(sp), allocatable, dimension(:) :: abs_tmin      ! absolute minimum temperature (degC)
-real(sp), allocatable, dimension(:) :: abs_tmax      ! absolute maximum temperature (degC)
-
-integer(i2), allocatable, dimension(:) :: outvar    ! Output variable for ncfile output adjusted by scale factor
-
-real(sp) :: tmin_sim
-real(sp) :: tmax_sim
-
 ! Elements to calculate current year and amount of days in current month
 
 integer :: i_count,outd
 integer :: i,k,t,d,m
 integer :: d0
 integer :: d1
-integer :: calyr
 integer :: ndm
 
-integer :: yr    ! Variable year
-integer :: mon   ! Variable month
 
 ! Variables for the smoothing process
 
@@ -107,10 +94,10 @@ integer  :: pdaydiff     ! difference between input and simulated wet days
 real(sp) :: precdiff     ! difference between input and simulated total monthly precipitation (mm)
 
 real(sp) :: prec_t       ! tolerance for difference between input and simulated total monthly precipitation (mm)
-integer, parameter  :: wetd_t = 1  ! tolerance for difference between input and simulated wetdays (days)
+integer, parameter  :: wetd_t = 10  ! tolerance for difference between input and simulated wetdays (days)
 
-integer  :: pdaydiff1 = huge(i4)   ! stored value of the best match difference between input and simulated wet days
-real(sp) :: precdiff1 = huge(sp)   ! stored value of the difference between input and simulated total monthly precipitation (mm)
+integer  :: pdaydiff1 = huge(i4)       ! stored value of the best match difference between input and simulated wet days
+real(sp) :: precdiff1 = huge(0.0_sp)   ! stored value of the difference between input and simulated total monthly precipitation (mm)
 
 ! data structures for meteorology
 
@@ -171,12 +158,22 @@ baddata_check = 0
 do k = 1, 20
 
   if(mtmin(k) < -273.15) then
-
     mtmin(k) = (mtmin(k-1) + mtmin(k+1)) / 2
     mtmax(k) = (mtmax(k-1) + mtmax(k+1)) / 2
 
     baddata_check = baddata_check + 1
-
+  end if
+  !---
+  if (pre(k) < 0.) then
+    pre(k) = 0.
+  end if
+  !---
+  if (wnd(k) < 0.) then
+    wnd(k) = 0.
+  end if
+  !---
+  if (cld(k) < 0. .or. cld(k) > 100.) then
+    cld(k) = 0.
   end if
 
 end do
@@ -305,6 +302,8 @@ monthloop : do m = 1, 13
 
     precdiff = (mprec_sim - pre(t)) / pre(t)
 
+    ! if (i_count > 990) print *, mwetd_sim, wet(t), pdaydiff1, pdaydiff, pre(t), precdiff, t, m      ! Debugging
+
     if (pdaydiff <= wetd_t .and. precdiff <= prec_t) then
 
       exit
@@ -358,10 +357,10 @@ monthloop : do m = 1, 13
   end if
 
   ! if (mwind_sim == 0.) then
-  !   if (wnd(i,j,t) > 0.) stop 'simulated monthly wind = 0 but input wind > 0'
+  !   if (wnd(t) > 0.) stop 'simulated monthly wind = 0 but input wind > 0'
   !   wind_corr = 1.
   ! else
-  !   wind_corr = wnd(i,j,t) / mwind_sim
+  !   wind_corr = wnd(t) / mwind_sim
   ! end if
 
   !--- Replaced "stop" command for now since only tmin and tmax is wanted (Leo)
@@ -399,11 +398,15 @@ monthloop : do m = 1, 13
   ! add the current monthly values on to the smoothing buffer
   ! write(0,*)cntt,t,w,t+w+1
 
-  mtminbuf = eoshift(mtminbuf,1,mtmin(t+w+1))
-  mtmaxbuf = eoshift(mtmaxbuf,1,mtmax(t+w+1))
-  ndbuf    = eoshift(ndbuf,1,nd(t+w+1))
-  cldbuf   = eoshift(cldbuf,1,cld(t+w+1))
-  wndbuf   = eoshift(wndbuf,1,wnd(t+w+1))
+  if (m < 13) then
+
+    mtminbuf = eoshift(mtminbuf,1,mtmin(t+w+1))
+    mtmaxbuf = eoshift(mtmaxbuf,1,mtmax(t+w+1))
+    ndbuf    = eoshift(ndbuf,1,nd(t+w+1))
+    cldbuf   = eoshift(cldbuf,1,cld(t+w+1))
+    wndbuf   = eoshift(wndbuf,1,wnd(t+w+1))
+
+  end if
 
   !-----------------------------------------------------------
   ! save month_met into dayvars module variable

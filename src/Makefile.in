@@ -109,10 +109,11 @@ am_alvar_OBJECTS = parametersmod.$(OBJEXT) errormod.$(OBJEXT) \
 	orbitmod.$(OBJEXT) daylengthmod.$(OBJEXT) metvarsmod.$(OBJEXT) \
 	diurnaltempmod.$(OBJEXT) radiationmod.$(OBJEXT) \
 	randomdistmod.$(OBJEXT) weathergenmod.$(OBJEXT) \
-	getdatamod.$(OBJEXT) outputmod.$(OBJEXT) \
-	netcdfinputmod.$(OBJEXT) netcdfoutputmod.$(OBJEXT) \
-	gwgenmod.$(OBJEXT) gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) \
-	modelmod.$(OBJEXT) main.$(OBJEXT)
+	hourlyprecmod.$(OBJEXT) getdatamod.$(OBJEXT) \
+	outputmod.$(OBJEXT) netcdfinputmod.$(OBJEXT) \
+	netcdfoutputmod.$(OBJEXT) gwgenmod.$(OBJEXT) \
+	gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) modelmod.$(OBJEXT) \
+	main.$(OBJEXT)
 alvar_OBJECTS = $(am_alvar_OBJECTS)
 alvar_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -318,6 +319,7 @@ alvar_SOURCES = \
 	radiationmod.f90 	 \
 	randomdistmod.f90  \
 	weathergenmod.f90  \
+	hourlyprecmod.f90  \
   getdatamod.f90     \
   outputmod.f90      \
 	netcdfinputmod.f90 \

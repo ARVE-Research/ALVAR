@@ -57,106 +57,116 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 
 !-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'tmin',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar = nint(dayvars(:,1:ndyear)%tmin / 0.1)
-
-ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'tmax',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar = nint(dayvars(:,1:ndyear)%tmax / 0.1)
-
-ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-! -----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'tday',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar = nint(dayvars(:,1:ndyear)%tday / 0.1)
-
-ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'tnight',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar = nint(dayvars(:,1:ndyear)%tnight / 0.1)
-
-ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'tdew',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar = nint(dayvars(:,1:ndyear)%tdew / 0.1)
-
-ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-! -----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'dayl',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar_r = dayvars(:,1:ndyear)%dayl
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-! -----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'vpd',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar_r = dayvars(:,1:ndyear)%vpd
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'srad',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar_r = dayvars(:,1:ndyear)%srad
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'rhum',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar_r = dayvars(:,1:ndyear)%rhum
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'dpet',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar_r = dayvars(:,1:ndyear)%dpet
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_varid(ofid,'tmin',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar = nint(dayvars(:,1:ndyear)%tmin / 0.1)
+!
+! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'tmax',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar = nint(dayvars(:,1:ndyear)%tmax / 0.1)
+!
+! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ! -----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'tday',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar = nint(dayvars(:,1:ndyear)%tday / 0.1)
+!
+! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'tnight',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar = nint(dayvars(:,1:ndyear)%tnight / 0.1)
+!
+! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'tdew',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar = nint(dayvars(:,1:ndyear)%tdew / 0.1)
+!
+! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ! -----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'prec',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%prec
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ! -----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'dayl',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%dayl
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ! -----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'vpd',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%vpd
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'srad',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%srad
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'rhum',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%rhum
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'dpet',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%dpet
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 
 

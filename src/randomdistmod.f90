@@ -61,7 +61,7 @@ subroutine genrndstate(grid)
 ! Generate a geohash randomstate speicifc to the gridcell
 
 use geohashmod,    only : geohash
-use metvarsmod,    only : lon,lat,indx,srt,cnt
+use metvarsmod,    only : lon,lat,indx,srt
 
 implicit none
 
@@ -343,11 +343,17 @@ else if (shape >= 1.) then
 
       call ran_normal(state,x)
       v = (1. + c * x)**3
-      if (v > 0.) exit
+      if (v > 0.) exit ! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
 
     end do
 
     u = ranur(state)  ! generate uniform variable u in the range (0,1)
+
+    ! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
+    u = max(u, 1e-5)
+    x = max(x, 1e-5)
+    d = max(d, 1e-5)
+    v = max(v, 1e-5)
 
     if (u < 1. - 0.0331 * x**4 .or. log(u) < half * x**2 + d*(1. - v + log(v))) then
       ret = scale * d * v
@@ -413,6 +419,10 @@ u = ranur(state)  ! generate uniform variable u in the range (0,1)
 if (shape == 0.0_sp) then
   ran_gp = loc - scale * log(u)
 else
+
+  ! Adjustment for very small values to avoid underflow error in exponential operation (Leo O Lai, Jun 2021)
+  u = max(u, 1e-5)
+
   ran_gp = loc + scale * (U**(-shape) - 1) / shape
 endif
 

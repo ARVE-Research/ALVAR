@@ -274,17 +274,17 @@ real(sp) :: rdelta    !solar declination (radians)
 real(sp) :: t1        !number of hours between sunrise/sunset and solar noon (hr)
 real(sp) :: t80       !solar hour corresponding to the 80 degree zenith angle
 
-real(sp) :: t    !solar hour (hr)
+! real(sp) :: t    !solar hour (hr)       ! Wunused variable
 
 real(sp) :: Z    !solar zenith angle (degrees)
 real(sp) :: Zn   !lesser of solar zenith angle at sunset or at midnight (degrees)
 real(sp) :: Z0   !zenith angle at solar noon (degrees)
 real(sp) :: cosZ !cosine solar zenith angle (fraction), used in calculation of instantaneous air mass
 
-real(sp) :: l
+! real(sp) :: l     ! Wunused variable
 
-integer :: steps  !integer number of time steps
-integer :: i      !counter
+! integer :: steps  !integer number of time steps   ! Wunused variable
+! integer :: i      !counter                        ! Wunused variable
 
 real(sp) :: sinlat
 real(sp) :: coslat
@@ -510,9 +510,9 @@ real(sp) :: zeta0 !diffuse insolation atmospheric turbidity factor
 real(sp) :: x     !tropics indicator (tropical = 1, else 0)
 real(sp) :: fm    !atmospheric transmittance function
 
-real(sp) :: j2w
-real(sp) :: fdif
-real(sp) :: stmp
+! real(sp) :: j2w
+! real(sp) :: fdif
+! real(sp) :: stmp
 real(sp) :: sunf   !bright sunshine duration fraction, n/N (fraction)
 
 !-----------------------------------
@@ -714,19 +714,20 @@ subroutine calcVPD(grid,dyr)
 ! Reference: Thornton et al. (2000) doi:10.1016/S0168-1923(00)00170-2
 
 use parametersmod, only : Tfreeze
-use metvarsmod,    only : dayvars, gridlat
+use metvarsmod,    only : dayvars
 
 implicit none
 
 integer,  intent(in)  :: grid    !gridnumber
 integer,  intent(in)  :: dyr     !day of year
 
-real(sp), pointer :: tmin
-real(sp), pointer :: tday
 real(sp), pointer :: vpd
 
-tmin => dayvars(grid,dyr)%tmin
-tday => dayvars(grid,dyr)%tday
+real(sp) :: tmin
+real(sp) :: tday
+
+tmin = dayvars(grid,dyr)%tmin
+tday = dayvars(grid,dyr)%tday
 vpd  => dayvars(grid,dyr)%vpd
 
 vpd = esat(tday+Tfreeze) - esat(tmin+Tfreeze)
@@ -787,6 +788,8 @@ function esat(temp)
 
   T = temp - Tfreeze
 
+  if (abs(T) < 1e-2) T = 0.   ! Avoid underflow at exponential operation (Leo O Lai, Jun 2021)
+
   esat = a(0)
 
   do i = 1,8
@@ -816,7 +819,7 @@ function desdT(temp)
 
   real(sp), dimension(0:8) :: b !coefficients
 
-  real(sp) :: tmp
+  ! real(sp) :: tmp
 
   real(sp) :: T
 
@@ -849,6 +852,8 @@ function desdT(temp)
   end if
 
   T = temp - Tfreeze  !these coefficients are for temperature values in Celcius
+
+  if (abs(T) < 1e-2) T = 0.   ! Avoid underflow at exponential operation (Leo O Lai, Jun 2021)
 
   desdT = b(0)
 

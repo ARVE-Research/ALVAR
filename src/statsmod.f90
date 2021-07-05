@@ -11,7 +11,7 @@ module statsmod
 ! http://people.sc.fsu.edu/~jburkardt/f_src/prob/prob.html
 ! on February 23rd, 2016. Last revised on 21 August 2013.
 
-! May 2020: 
+! May 2020:
 !   Removed the hardcoded functions gamma and gamma_log in favor of the
 !   (hopefully faster) Fortran 2008 intrinsics gamma and log_gamma.
 !   Testing change calculations to single precision since that is all we need really.
@@ -22,12 +22,12 @@ implicit none
 
 public :: normal_cdf_inv        ! inverse of the normal CDF
 public :: gamma_pdf             ! Gamma probability density function (PDF)
-public :: gamma_cdf             ! Gamma cumulative distribution function (CDF) 
+public :: gamma_cdf             ! Gamma cumulative distribution function (CDF)
 public :: gamma_cdf_inv         ! inverse of the Gamma CDF
 
 private :: normal_01_cdf_inv    ! one side of the inverse normal CDF, used by normal_01_cdf_inv
 private :: evalpoly             ! function to evaluate a polynomial function of any order, used by normal_01_cdf_inv
-private :: qchisq_appr          ! chi-square approximation, used by gamma_cdf_inv
+public  :: qchisq_appr          ! chi-square approximation, used by gamma_cdf_inv
 private :: gamma_inc            ! incomplete Gamma function, used by gamma_cdf
 private :: normal_01_cdf        ! evaluate the Normal 01 CDF, used by gamma_inc
 
@@ -202,7 +202,7 @@ real(dp), intent(in) :: scale ! the scale of the gamma distribution
 ! parameters
 
 integer,  parameter :: maxit   = 1000
-real(dp), parameter :: eps1    = 1.e-2 
+real(dp), parameter :: eps1    = 1.e-2
 real(dp), parameter :: eps2    = 5.e-7
 real(dp), parameter :: pmin    = 1.e-25
 real(dp), parameter :: pmax    = 1. - 1.e-14
@@ -213,15 +213,15 @@ real(dp), parameter :: pneginf = -10.e34
 integer  :: i
 real(dp) :: a
 real(dp) :: b
-real(dp) :: c 
-real(dp) :: g 
-real(dp) :: ch 
+real(dp) :: c
+real(dp) :: g
+real(dp) :: ch
 real(dp) :: ch0
 real(dp) :: p1
 real(dp) :: p2
 real(dp) :: q
-real(dp) :: s1 
-real(dp) :: s2 
+real(dp) :: s1
+real(dp) :: s2
 real(dp) :: s3
 real(dp) :: s4
 real(dp) :: s5
@@ -234,7 +234,7 @@ if (alpha == 0) then
 
   gamma_cdf_inv = 0
   return
-  
+
 end if
 
 g = log_gamma(alpha)
@@ -282,9 +282,9 @@ do i=1,MAXIT
   s1 = (210. + a * (140. + a * (105. + a * (84. + a * (70. + 60. * a))))) / 420.
 
   s2 = (420. +  a * (735. + a * (966. + a * (1141. + 1278. * a)))) / 2520.
-  
+
   s3 = (210. + a * (462. + a * (707. + 932. * a))) / 2520.0
- 
+
   s4 = (252. + a * (672. + 1182. * a) + c * (294. +a * (889. + 1740. * a))) / 5040.0
 
   s5 = (84. + 2264. * a + c*(1175. + 606. * a)) / 2520.0
@@ -343,7 +343,7 @@ implicit none
 
 real(dp), intent(in)  :: p ! the value of the cumulative probability densitity function.  0 < P < 1.
                            ! If P is outside this range, an "infinite" value will be returned.
-                           
+
 real(dp), intent(out) :: x ! the normal deviate value with the property that the probability of a
                            ! standard normal deviate being less than or equal to the value is P.
 
@@ -361,7 +361,7 @@ real(dp), parameter, dimension(8) :: a = &
     6.7265770927008700853e4,   &
     3.3430575583588128105e4,   &
     2.5090809287301226727e3    ]
-            
+
 real(dp), parameter, dimension(8) :: b = &
   [ 1.,                        &
     4.2313330701600911252e1,   &
@@ -538,7 +538,7 @@ p1 = log(p)
 if (nu < (-1.24) * p1) then
 
   ! for small chi-squared */
-  !   log(alpha) + g = 
+  !   log(alpha) + g =
   !   log(alpha) + log(gamma(alpha)) =
   !   log(alpha*gamma(alpha)) =
   !   lgamma(alpha+1)
@@ -724,7 +724,7 @@ else
   a = 1._dp - p
   b = a + x + 1._dp
   c = 0._dp
-  
+
   pn1 = 1._dp
   pn2 = x
   pn3 = x + 1._dp

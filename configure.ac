@@ -93,7 +93,7 @@ if test "x$enable_debug" = xyes; then
 
   elif test "x$FC_REALNAME" = xgfortran; then
 
-    FCFLAGS="$FCFLAGS -ffree-line-length-none -finit-local-zero -fcheck=all -ffpe-trap=invalid,zero,overflow,underflow -g -fbacktrace -Wall -pedantic"
+    FCFLAGS="$FCFLAGS -ffree-line-length-none -finit-local-zero -fcheck=all,no-array-temps -ffpe-trap=invalid,zero,overflow,underflow -g -fbacktrace -Wall -pedantic"
 
   else
 

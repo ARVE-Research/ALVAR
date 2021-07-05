@@ -10,6 +10,7 @@ use drivermod,       only : initdate,initlonlat,initmonvars,initgeorndst,copygen
 use diurnaltempmod,  only : diurnaltemp,humidity,calctdew
 use orbitmod,        only : orbit,calcorbitpars
 use radiationmod,    only : calcPjj,radpet,tdewpet,calcVPD
+use hourlyprecmod,   only : hourlyprec
 use netcdfinputmod,  only : netcdfinput
 use netcdfoutputmod, only : netcdfoutput
 use gwgenmod,        only : gwgen
@@ -40,10 +41,9 @@ integer(i4) :: gridcount
 integer :: grid
 integer :: yr
 integer :: d
-integer :: i
 
-real :: start_time, end_time
-integer :: test
+real(sp) :: start_time
+real(sp) :: end_time
 
 call CPU_TIME(start_time)
 
@@ -107,11 +107,14 @@ yearloop : do yr = 1, calcyrs
 
       ! call calctdew(grid,d)        ! Routine written by Leo Lai (after Kimbell et al., 1997)
 
-      ! call tdewpet(grid,d)       ! Routine written by Leo Lai (iterative tdew and PET routine, after Thronton et al., 2000)
+      ! call tdewpet(grid,d)         ! Routine written by Leo Lai (iterative tdew and PET routine, after Thronton et al., 2000)
 
       call humidity(grid,d)
 
       call calcVPD(grid,d)
+
+      ! Disaggregate 24 hour total prec into hourly series
+      call hourlyprec(grid,yr,d)
 
       ! Print grid data if the process recieved the user-specified lon/lat grid
       if (lprint .AND. grid == gprint) call printgrid(info,grid,yr,d)

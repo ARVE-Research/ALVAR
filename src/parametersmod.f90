@@ -12,8 +12,7 @@ integer, parameter :: i1 = int8    ! 1 byte integer
 integer, parameter :: i2 = int16   ! 2 byte integer
 integer, parameter :: i4 = int32   ! 4 byte integer
 integer, parameter :: sp = real32  ! 4 byte real
-integer, parameter :: dp = real32  ! 8 byte real
-! integer, parameter :: dp = real64  ! 8 byte real
+integer, parameter :: dp = real64  ! 8 byte real
 
 integer, parameter :: so = output_unit  ! unit number for standard output
 

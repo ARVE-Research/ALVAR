@@ -69,6 +69,8 @@ type day_metvars
   real(sp) :: dpet    ! total potential evapotranspiration (mm)
   real(sp) :: vpd     ! average daytime saturation vapor pressure deficit (Pa)
 
+  real(dp), dimension(24) :: hprec    ! hourly precipitation (mm)
+
 end type day_metvars
 
 type(day_metvars), target, allocatable, dimension(:,:) :: dayvars ! Dimension allocate from number of days in year (365 or 366)

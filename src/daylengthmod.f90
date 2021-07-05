@@ -41,9 +41,9 @@ real(dp) :: rdelta      ! Solar declination (rad)
 real(dp) :: u
 real(dp) :: v
 real(dp) :: hh
-real(dp) :: sinhh
-real(dp) :: qo
-real(dp) :: w
+! real(dp) :: sinhh
+! real(dp) :: qo
+! real(dp) :: w
 integer  :: d,e
 real(dp) :: theta               ! Earth orbit seasonal angle (radians)
 

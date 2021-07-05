@@ -184,11 +184,11 @@ integer :: cal_year
 
 !parameters
 
-real(dp), parameter :: step = 360._dp / 365.25d0
+real(dp), parameter :: step = 360._dp / 365.25_dp
 
-real(dp), parameter :: xod = 23.320556d0
-real(dp), parameter :: xop =  3.392506d0
-real(dp), parameter :: prm = 50.439273d0
+real(dp), parameter :: xod = 23.320556_dp
+real(dp), parameter :: xop =  3.392506_dp
+real(dp), parameter :: prm = 50.439273_dp
 
 !variables
 
@@ -273,7 +273,7 @@ if (tra > 1.d-8) then
 
     else if (xes < 0._dp) then !line 15
 
-      rp   = 1.5d0 * pi
+      rp   = 1.5_dp * pi
       perh = rp * r2d
 
     else !line 16
@@ -293,7 +293,7 @@ else
 
   else if (xes < 0._dp) then !line 15
 
-    rp   = 1.5d0 * pi
+    rp   = 1.5_dp * pi
     perh = rp * r2d
 
   else !line 16
@@ -363,10 +363,10 @@ real(sp),        intent(out) :: delta  !solar declination (degrees)
 
 !parameters
 
-real(dp), parameter :: ss   = 1366.5d0    !solar constant (W m-2), updated with grab from NASA web site
-real(dp), parameter :: tau  =   86.4d0
+real(dp), parameter :: ss   = 1366.5_dp    !solar constant (W m-2), updated with grab from NASA web site
+real(dp), parameter :: tau  =   86.4_dp
 real(dp), parameter :: test =    1.e-8
-real(dp), parameter :: step =  360._dp/365.25d0
+real(dp), parameter :: step =  360._dp/365.25_dp
 
 !variables
 
@@ -440,7 +440,7 @@ xl  = perh + 180._dp
 xllp = xl * d2r
 xee  = ecc * ecc
 xse  = sqrt(1._dp - xee)
-xlam = (ecc / 2._dp + ecc * xee / 8._dp) * (1._dp + xse) * sin(xllp) - xee / 4._dp * (0.5d0 + xse) * &
+xlam = (ecc / 2._dp + ecc * xee / 8._dp) * (1._dp + xse) * sin(xllp) - xee / 4._dp * (0.5_dp + xse) * &
         sin(2._dp * xllp) + ecc * xee / 8._dp * (1._dp / 3._dp + xse) * sin(3._dp * xllp)
 
 xlam  = 2._dp * xlam / d2r

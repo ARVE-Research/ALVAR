@@ -264,22 +264,22 @@ real(sp) :: dSVP  ! Rate of change of saturation vapour pressure in Pa K-1
 real(dp) :: Ep    ! Potential evapotranspiration in kg m-2 s-1
 real(dp) :: EF    ! Ratio of Ep to annual precipitation (m)
 
-real(sp) :: ampl  ! Seasonal variation in daylength in hour
-real(sp) :: sunrise  ! Sunrise time
-real(sp) :: sunset  ! Sunset time
+! real(sp) :: ampl  ! Seasonal variation in daylength in hour
+! real(sp) :: sunrise  ! Sunrise time
+! real(sp) :: sunset  ! Sunset time
 real(sp) :: dayl  ! Daylength in seconds
 real(sp) :: dsol  ! Solar declination angle in degrees
-real(sp) :: w  ! Elevation angle in degrees
-real(sp) :: Ma    ! Mean anomaly of orbit in rad
-real(sp) :: va    ! True anomaly of orbit in rad
-real(sp) :: Rd    ! Actual distance between sun and Earth at yearday in Gm
+! real(sp) :: w  ! Elevation angle in degrees
+! real(sp) :: Ma    ! Mean anomaly of orbit in rad
+! real(sp) :: va    ! True anomaly of orbit in rad
+! real(sp) :: Rd    ! Actual distance between sun and Earth at yearday in Gm
 
 real(sp) :: Rn    ! Daily average insolation in W m-2
 real(sp) :: Gn    ! Daily average surface conductive energy flux in W m-2
 
 real(sp) :: Td    ! Dew point temperature in degree Celcius
 real(sp) :: RH
-real(sp) :: Tw
+! real(sp) :: Tw
 
 !---
 
