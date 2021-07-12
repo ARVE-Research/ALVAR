@@ -1,9 +1,11 @@
 module netcdfoutputmod
 
-use parametersmod, only : i2,i4,sp,dp
+use parametersmod, only : i2,i4,sp,dp,missing_i2
 use errormod,      only : ncstat,netcdf_err
 use outputmod,     only : infompi
-use metvarsmod,    only : dayvars,ndyear,nd
+use metvarsmod,    only : dayvars,ndyear,nd,calcyrs
+use simplesoilmod, only : soilvars
+use biome1mod,     only : biomevars,biome_mean
 use weathergenmod, only : roundto
 use netcdf
 use mpi
@@ -26,9 +28,11 @@ integer :: varid
 integer(i4), dimension(2) :: srt
 integer(i4), dimension(2) :: cnt
 
+integer(i2), allocatable, dimension(:)   :: outvar_biome
 integer(i2), allocatable, dimension(:,:) :: outvar
 real(sp),    allocatable, dimension(:,:) :: outvar_r
 
+integer :: i
 
 
 
@@ -47,6 +51,7 @@ end if
 
 cnt(2) = ndyear
 
+allocate(outvar_biome(cnt(1)))
 
 allocate(outvar(cnt(1),ndyear))
 
@@ -55,7 +60,42 @@ allocate(outvar_r(cnt(1),ndyear))
 ncstat = nf90_open(outfile,nf90_write,ofid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
+!-----------------------------------------------------------
+!
+ncstat = nf90_inq_varid(ofid,'biome1_year',varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
+outvar_biome = biomevars(:,year)%biome
+
+where (outvar_biome == missing_i2)
+  outvar_biome = missing_i2
+else where
+  outvar_biome = nint(outvar_biome / 0.1)
+end where
+
+ncstat = nf90_put_var(ofid,varid,outvar_biome,start=[srt(1),year],count=[cnt(1),1])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+!-----------------------------------------------------------
+
+if (year == calcyrs) then
+
+  ncstat = nf90_inq_varid(ofid,'biome1_mean',varid)
+  if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+  outvar_biome = biome_mean
+
+  where (outvar_biome == missing_i2)
+    outvar_biome = missing_i2
+  else where
+    outvar_biome = nint(outvar_biome / 0.1)
+  end where
+
+  ncstat = nf90_put_var(ofid,varid,outvar_biome,start=[srt(1)],count=[cnt(1)])
+  if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+end if
+!
 !-----------------------------------------------------------
 !
 ! ncstat = nf90_inq_varid(ofid,'tmin',varid)
@@ -164,6 +204,26 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 ! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 !
 ! outvar_r = dayvars(:,1:ndyear)%dpet
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'daet',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%daet
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! !-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'alpha',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%alpha
 !
 ! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
 ! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)

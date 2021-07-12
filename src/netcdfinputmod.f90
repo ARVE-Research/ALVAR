@@ -2,6 +2,7 @@ module netcdfinputmod
 
 use parametersmod, only : i2,i4,sp,dp
 use metvarsmod,    only : xlen,ylen,ilen,tlen,lon,lat,indx,time,srt,cnt,cntt,p0,p1,monvars
+use simplesoilmod, only : nl,zpos,soilvars
 use outputmod,     only : infompi
 use errormod,      only : ncstat,netcdf_err
 use getdatamod,    only : readdata
@@ -10,13 +11,17 @@ use mpi
 
 implicit none
 
+character(100), parameter :: soilfile = './soil30m_list-formatted.nc'
+
 contains
 
 !---------------------------------------------------------------------
-! Read in the full array (all months for all gridcells) of monthly variables from netcdf file
-subroutine netcdfinput(info)
 
-type(infompi), target    , intent(in) :: info
+subroutine metdatainput(info)
+
+! Read in the full array (all months for all gridcells) of monthly variables from netcdf file
+
+type(infompi), target, intent(in) :: info
 
 character(100), pointer :: infile
 integer :: ifid
@@ -170,16 +175,153 @@ do i = 1, cnt(1)
 
 end do
 
-!---------------------------------------------------------------------
-
 ncstat = nf90_close(ifid)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 
+end subroutine metdatainput
 
-end subroutine netcdfinput
+!---------------------------------------------------------------------
+
+subroutine soildatainput(info)
+
+! Read in the full array all gridcells and all layers, of soil variales (sand, clay and cfvo composition)
+
+type(infompi), target, intent(in) :: info
+
+integer :: sfid
+integer :: dimid
+integer :: varid
+
+integer(i4) :: gridstart
+integer(i4) :: gridcount
+
+integer(i2), allocatable, dimension(:,:) :: var_in
+real(sp),    allocatable, dimension(:,:) :: values
+
+real(sp)    :: scale_factor
+real(sp)    :: add_offset
+integer(i2) :: missing_value
+
+integer :: i
+
+!------
+
+gridstart = srt(1)
+gridcount = cnt(1)
+
+! -----------------------------------------------------
+! INPUT: Read in layer depth variable (zpos)
+
+ncstat = nf90_open(soilfile,nf90_nowrite,sfid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)           !
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_inq_varid(sfid,"zpos",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(sfid,varid,zpos)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+! -----------------------------------------------------
+! INPUT: Read in sand composition
+
+allocate(var_in(gridcount,nl))
+allocate(values(gridcount,nl))
+
+ncstat = nf90_inq_varid(sfid,"sand",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(sfid,varid,var_in,start=[gridstart,1],count=[gridcount,nl])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(sfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(sfid,varid,"scale_factor",scale_factor)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in /= missing_value)
+  values = real(var_in) * scale_factor
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  soilvars(i)%sand(1:nl) = values(i,1:nl)
+end do
+
+deallocate(var_in)
+deallocate(values)
+
+! -----------------------------------------------------
+! INPUT: Read in sand composition
+
+allocate(var_in(gridcount,nl))
+allocate(values(gridcount,nl))
+
+ncstat = nf90_inq_varid(sfid,"clay",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(sfid,varid,var_in,start=[gridstart,1],count=[gridcount,nl])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(sfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(sfid,varid,"scale_factor",scale_factor)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in /= missing_value)
+  values = real(var_in) * scale_factor
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  soilvars(i)%clay(1:nl) = values(i,1:nl)
+end do
+
+deallocate(var_in)
+deallocate(values)
+
+! -----------------------------------------------------
+! INPUT: Read in sand composition
+
+allocate(var_in(gridcount,nl))
+allocate(values(gridcount,nl))
+
+ncstat = nf90_inq_varid(sfid,"cfvo",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(sfid,varid,var_in,start=[gridstart,1],count=[gridcount,nl])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(sfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(sfid,varid,"scale_factor",scale_factor)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in /= missing_value)
+  values = real(var_in) * scale_factor
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  soilvars(i)%cfvo(1:nl) = values(i,1:nl)
+end do
+
+deallocate(var_in)
+deallocate(values)
+
+!------
+
+ncstat = nf90_close(sfid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 
+end subroutine soildatainput
 
 
 end module netcdfinputmod

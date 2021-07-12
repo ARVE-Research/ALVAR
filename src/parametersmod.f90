@@ -35,6 +35,9 @@ real(sp), parameter :: hsp = huge(sp)    ! largest positive 4-byte real
 
 integer, parameter, dimension(12) :: midday    = [ 16,44,75,105,136,166,197,228,258,289,319,350 ]  !day number of mid-month day
 
+real(sp),    parameter :: missing_sp = -9999.
+integer(i2), parameter :: missing_i2 = -32768
+
 contains
 
 !-----------------------------------------------------------------------------

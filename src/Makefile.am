@@ -15,6 +15,9 @@ alvar_SOURCES =      \
 	randomdistmod.f90  \
 	weathergenmod.f90  \
 	hourlyprecmod.f90  \
+	simplesoilmod.f90  \
+	aetalphamod.f90    \
+	biome1mod.f90			 \
   getdatamod.f90     \
   outputmod.f90      \
 	netcdfinputmod.f90 \

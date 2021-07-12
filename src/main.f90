@@ -12,7 +12,7 @@ program main
 ! $ module purge              ! because Autotools switched GCC back to 9.3.0. v10.2 is required to run the code
 ! $ module load netCDF-Fortran/4.5.3-gmpich-2021.01
 !
-! $ mpirun -np 18 ./src/gwgen /home/terraces/datasets/dgvm_input/climate/transient1871-2010_list-formatted.nc -110.25/40.25 1990/10 test.nc
+! $ mpirun -np 18 ./src/alvar /home/terraces/datasets/dgvm_input/climate/transient1871-2010_list-formatted.nc -110.25/40.25 1990/10 test.nc
 !
 ! NOTE: user-specified lon/lat must be **EXACT of the input file values** (routine to find closest gridcell is yet to be written) - Leo Lai 28 Apr 2021
 

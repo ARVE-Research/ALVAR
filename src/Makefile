@@ -109,7 +109,8 @@ am_alvar_OBJECTS = parametersmod.$(OBJEXT) errormod.$(OBJEXT) \
 	orbitmod.$(OBJEXT) daylengthmod.$(OBJEXT) metvarsmod.$(OBJEXT) \
 	diurnaltempmod.$(OBJEXT) radiationmod.$(OBJEXT) \
 	randomdistmod.$(OBJEXT) weathergenmod.$(OBJEXT) \
-	hourlyprecmod.$(OBJEXT) getdatamod.$(OBJEXT) \
+	hourlyprecmod.$(OBJEXT) simplesoilmod.$(OBJEXT) \
+	aetalphamod.$(OBJEXT) biome1mod.$(OBJEXT) getdatamod.$(OBJEXT) \
 	outputmod.$(OBJEXT) netcdfinputmod.$(OBJEXT) \
 	netcdfoutputmod.$(OBJEXT) gwgenmod.$(OBJEXT) \
 	gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) modelmod.$(OBJEXT) \
@@ -244,7 +245,7 @@ PACKAGE_VERSION = 0.1
 PATH_SEPARATOR = :
 PKG_CONFIG = /usr/bin/pkg-config
 PKG_CONFIG_LIBDIR = 
-PKG_CONFIG_PATH = /home/public/easybuild/software/X11/20201008-GCCcore-10.2.0/share/pkgconfig:/home/public/easybuild/software/X11/20201008-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/libpciaccess/0.16-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/xorg-macros/1.19.2-GCCcore-10.2.0/share/pkgconfig:/home/public/easybuild/software/fontconfig/2.13.92-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/util-linux/2.36-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/freetype/2.10.3-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/libpng/1.6.37-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/bzip2/1.0.8-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/expat/2.2.9-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/netCDF-Fortran/4.5.3-gmpich-2021.01/lib/pkgconfig:/home/public/easybuild/software/netCDF/4.7.4-gmpich-2021.01/lib64/pkgconfig:/home/public/easybuild/software/cURL/7.72.0-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/HDF5/1.12.0-gmpich-2021.01/lib/pkgconfig:/home/public/easybuild/software/MPICH/3.3.2-GCC-10.2.0/lib/pkgconfig:/home/public/easybuild/software/zlib/1.2.11-GCCcore-10.2.0/lib/pkgconfig
+PKG_CONFIG_PATH = /home/public/easybuild/software/netCDF-Fortran/4.5.3-gmpich-2021.01/lib/pkgconfig:/home/public/easybuild/software/netCDF/4.7.4-gmpich-2021.01/lib64/pkgconfig:/home/public/easybuild/software/cURL/7.72.0-GCCcore-10.2.0/lib/pkgconfig:/home/public/easybuild/software/HDF5/1.12.0-gmpich-2021.01/lib/pkgconfig:/home/public/easybuild/software/MPICH/3.3.2-GCC-10.2.0/lib/pkgconfig:/home/public/easybuild/software/zlib/1.2.11-GCCcore-10.2.0/lib/pkgconfig
 RANLIB = ranlib
 SED = /usr/bin/sed
 SET_MAKE = 
@@ -320,6 +321,9 @@ alvar_SOURCES = \
 	randomdistmod.f90  \
 	weathergenmod.f90  \
 	hourlyprecmod.f90  \
+	simplesoilmod.f90  \
+	aetalphamod.f90    \
+	biome1mod.f90			 \
   getdatamod.f90     \
   outputmod.f90      \
 	netcdfinputmod.f90 \

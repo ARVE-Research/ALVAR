@@ -67,6 +67,8 @@ type day_metvars
   real(sp) :: dayl    ! daylength (h)
   real(sp) :: srad    ! downwelling surface shortwave radiation (kJ m-2 d-1)
   real(sp) :: dpet    ! total potential evapotranspiration (mm)
+  real(sp) :: daet    ! total actual evapotranspiration (mm)
+  real(sp) :: alpha   ! ratio of daily AET/PET (fraction)
   real(sp) :: vpd     ! average daytime saturation vapor pressure deficit (Pa)
 
   real(dp), dimension(24) :: hprec    ! hourly precipitation (mm)

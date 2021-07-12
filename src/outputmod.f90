@@ -52,7 +52,7 @@ integer :: ncstat
 integer :: varid
 integer :: dimid
 
-integer, dimension(4) :: dimids
+integer, dimension(5) :: dimids
 
 integer :: xlen
 integer :: ylen
@@ -239,23 +239,86 @@ ncstat = nf90_put_att(ofid,varid,'missing_value',-1)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
-! time
+! days
 
-ncstat = nf90_def_dim(ofid,'time',ndays,dimid)
+ncstat = nf90_def_dim(ofid,'days',ndays,dimid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 dimids(4) = dimid
 
-ncstat = nf90_def_var(ofid,'time',nf90_int,dimid,varid)
+ncstat = nf90_def_var(ofid,'days',nf90_int,dimid,varid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_var(ofid,varid,(/(i,i=1,ndays,1)/))
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'long_name','time in number of dats')
+ncstat = nf90_put_att(ofid,varid,'long_name','time in number of days')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','days')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+! years
+
+ncstat = nf90_def_dim(ofid,'years',calcyrs,dimid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+dimids(5) = dimid
+
+ncstat = nf90_def_var(ofid,'years',nf90_int,dimid,varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,(/(i,i=1,calcyrs,1)/))
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','time in number of years')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','years')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+
+!----
+!biome type
+
+ncstat = nf90_def_var(ofid,'biome1_year',nf90_short,[dimids(3),dimids(5)],varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','BIOME1 annual output')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','type')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!biome type
+
+ncstat = nf90_def_var(ofid,'biome1_mean',nf90_short,dimids(3),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','BIOME1 mean climate output')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','type')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 
@@ -464,6 +527,42 @@ ncstat = nf90_put_att(ofid,varid,'long_name','daily potential evapotranspiration
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','mm d-1')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!daily PET
+
+ncstat = nf90_def_var(ofid,'daet',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily actual evapotranspiration')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','mm d-1')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!daily PET
+
+ncstat = nf90_def_var(ofid,'alpha',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','AET/PET ratio')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)

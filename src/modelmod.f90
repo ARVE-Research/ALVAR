@@ -6,12 +6,15 @@ use parametersmod,   only : i2,i4,sp,dp
 use outputmod,       only : infompi,printgrid
 use randomdistmod,   only : genrndstate
 use metvarsmod,      only : monvars,dayvars,startyr,calcyrs,genvars,dayvars,ndyear,srt,cnt,clon,clat,gridlon,gridlat,lprint,gprint
-use drivermod,       only : initdate,initlonlat,initmonvars,initgeorndst,copygenvars,initdayvars,saveclonlat
+use drivermod,       only : initdate,initlonlat,initmonvars,initsoilvars,initgeorndst,copygenvars,initdayvars,saveclonlat
 use diurnaltempmod,  only : diurnaltemp,humidity,calctdew
 use orbitmod,        only : orbit,calcorbitpars
 use radiationmod,    only : calcPjj,radpet,tdewpet,calcVPD
 use hourlyprecmod,   only : hourlyprec
-use netcdfinputmod,  only : netcdfinput
+use simplesoilmod,   only : soilvars,simplesoil
+use aetalphamod,     only : aet_alpha
+use biome1mod,       only : initbiomevars,savebiomevars,calcbiome_year,calcbiome_mean
+use netcdfinputmod,  only : metdatainput,soildatainput
 use netcdfoutputmod, only : netcdfoutput
 use gwgenmod,        only : gwgen
 use gwgenmodnew,     only : gwgen_new
@@ -23,6 +26,7 @@ implicit none
 contains
 
 !-------------------------------------------------------
+
 subroutine model(info,job,rank)
 
 type(infompi), target    , intent(in) :: info
@@ -53,11 +57,17 @@ call initdate(info,job,rank)        ! Initialize the start, count and date of th
 
 call initmonvars()                  ! Initilize the dimensions of the metvars variables
 
-call netcdfinput(info)              ! Read in full array of monthly variable series
+call initsoilvars()                 ! Initialize the dimensions of the soilvar variales
+
+call metdatainput(info)             ! Read in full array of monthly variable series
+
+call soildatainput(info)            ! Read in full array of soil variables
 
 call initlonlat(info,job,rank)      ! Save lon and lat for each indexed grid
 
 call initgeorndst()                 ! Initialize dimension of the random state variables
+
+call initbiomevars(calcyrs)         ! Initialize dimension of biomevars for saving annual met variables necessary for biome PFT (annual and long-term mean) estiamtes
 
 !-----------------------------------------------------------
 
@@ -65,12 +75,21 @@ gridcount = job(2)
 
 yearloop : do yr = 1, calcyrs
 
+  ! Calculate soil properties for all grids from soil input data file
+  gridloop_soil : do grid = 1, gridcount
+
+    if (yr == 1) call simplesoil(grid)
+
+  end do gridloop_soil
+
+  !------
+
   ! Allocate dimension of dayvars from number of days in a year (365 or 366)
   call initdayvars(yr,gridcount)
 
   call calcorbitpars(startyr,yr,orbit)
 
-  gridloop : do grid = 1, gridcount
+  gridloop_metyear : do grid = 1, gridcount
 
     ! Generate an initial grid-specific (geohash) random state for weathergen subroutine
     ! 'georndst' variable in randomdistmod
@@ -87,13 +106,13 @@ yearloop : do yr = 1, calcyrs
     ! Generate daily met variables from monthly series (of original input variables)
     call gwgen_new(grid)
 
-  end do gridloop
+  end do gridloop_metyear
 
-  !--------
+  !------
 
   dayloop : do d = 1, ndyear
 
-    gridloop2 : do grid = 1, gridcount
+    gridloop_metday : do grid = 1, gridcount
 
       ! Copy 20 months (12 months +/- 4 months buffer) of monthly data for weathergen
       call copygenvars(yr,grid)
@@ -107,11 +126,15 @@ yearloop : do yr = 1, calcyrs
 
       ! call calctdew(grid,d)        ! Routine written by Leo Lai (after Kimbell et al., 1997)
 
-      ! call tdewpet(grid,d)         ! Routine written by Leo Lai (iterative tdew and PET routine, after Thronton et al., 2000)
+      ! call tdewpet(grid,d)         ! Routine written by Leo Lai (iterative stable solution tdew and PET routine, after Thronton et al., 2000)
 
       call humidity(grid,d)
 
       call calcVPD(grid,d)
+
+      call aet_alpha(yr,grid,d)
+
+      ! if (dayvars(grid,d)%alpha > 0.) print *, dayvars(grid,d)%daet,dayvars(grid,d)%dpet,dayvars(grid,d)%alpha
 
       ! Disaggregate 24 hour total prec into hourly series
       call hourlyprec(grid,yr,d)
@@ -119,14 +142,33 @@ yearloop : do yr = 1, calcyrs
       ! Print grid data if the process recieved the user-specified lon/lat grid
       if (lprint .AND. grid == gprint) call printgrid(info,grid,yr,d)
 
-    end do gridloop2
+    end do gridloop_metday
 
   end do dayloop
 
-  ! Output dayvars into netcdf file in parallel
+  !------
+
+  ! Calculate biome type for first user-specified year, subroutine from BIOME1
+  gridloop_biome : do grid = 1, gridcount
+
+    call copygenvars(yr,grid)
+
+    call savebiomevars(yr,grid)                       ! Save met variables for annual and long-term climatological mean biome PFT estimation
+
+    call calcbiome_year(yr,grid)                      ! Calculate the annual estimation of biome
+
+    if (yr == calcyrs) call calcbiome_mean(grid)      ! Calculate the long-term climate biome (only if at last year loop)
+
+  end do gridloop_biome
+
+  !------
+
+  ! Output variables into netcdf file in parallel
   call netcdfoutput(info,job,yr)
 
   deallocate(dayvars)
+
+  if (rank == 0) write(0,*) 'Finished with year ', startyr+yr-1
 
 end do yearloop
 

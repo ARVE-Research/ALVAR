@@ -107,7 +107,7 @@ end do
 ! Create start and count array from the mpi job info
 
 srt = [job(1), t0]    ! Start of gridcell, start of time dimension
-cnt = [job(2), nt]    ! Count of gridcell, count of time dimension
+cnt = [job(2), nt]    ! Count of gridcell, count of time dimension (including +/- 1 buffer years)
 
 
 end subroutine initdate
@@ -197,7 +197,6 @@ use metvarsmod, only : cnt,cntt,monvars
 implicit none
 
 integer :: gridcount
-integer :: moncount
 integer :: i
 
 !-------------------
@@ -221,6 +220,29 @@ end do
 
 
 end subroutine initmonvars
+
+!---------------------------------------------------------------------
+
+subroutine initsoilvars()
+
+use simplesoilmod, only : soilvars
+use metvarsmod,    only : cnt
+
+implicit none
+
+integer :: gridcount
+integer :: i
+
+!-------------------
+
+gridcount = cnt(1)
+
+!-------------------
+
+allocate(soilvars(gridcount))
+
+
+end subroutine initsoilvars
 
 !---------------------------------------------------------------------
 
