@@ -10,14 +10,16 @@ alvar_SOURCES =      \
 	orbitmod.f90 			 \
 	daylengthmod.f90 	 \
 	metvarsmod.f90		 \
+	soilstatemod.f90   \
 	diurnaltempmod.f90 \
 	radiationmod.f90 	 \
 	randomdistmod.f90  \
 	weathergenmod.f90  \
 	hourlyprecmod.f90  \
-	simplesoilmod.f90  \
 	aetalphamod.f90    \
 	biome1mod.f90			 \
+	hydrologymod.f90   \
+	fireindexmod.f90   \
   getdatamod.f90     \
   outputmod.f90      \
 	netcdfinputmod.f90 \

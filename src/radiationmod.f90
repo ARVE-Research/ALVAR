@@ -143,50 +143,86 @@ end function elev_corr
 
 !----------------------------------------------------------------------------------------------------------------
 
-subroutine radpet(grid,dyr,Ratm,iter)
+subroutine elev_Ratm(grid,day)
 
-! Calculate total downwelling shortwave radiation and PET
+! Calculate variables for atmospheric pressure relative to sea-level
+! Equations copied from ARVE-DGVM (Leo Lai, Jul 2021)
 
-use parametersmod, only : midday
-use orbitmod,      only : orbitpars,toa_insolation,orbit
-use metvarsmod,    only : genvars,dayvars,gridlat
+use metvarsmod, only : dayvars,elev
 
 implicit none
 
-!arguments
+real(sp), parameter :: Pstd = 101325.     ! Standard atmospheric pressure (Pa)
 
-! type(orbitpars), intent(in) :: orbit
-! real(dp),        intent(in) :: lat
-! real(sp),        intent(in) :: tcm   !temperature of the coldest month
-! real(sp),        intent(in) :: Pjj
-integer(i4),     intent(in) :: grid
-integer,         intent(in) :: dyr
-real(sp),        intent(in) :: Ratm  !relative atmospheric pressure (based on elevation)
-integer,         intent(in) :: iter  !iteration number
+integer(i4), intent(in) :: grid
+integer(i4), intent(in) :: day
 
-! type(day_metvars), intent(inout) :: met
+real(sp), pointer :: Patm           ! Atmospheric pressure at elevation (Pa)
+real(sp), pointer :: Patm30         ! Atmospheric pressure at elevation adjusted by reference 30m height (Pa)
+real(sp), pointer :: Ratm           ! Relative atmospheric pressure to sea-level at elevation (fraction)
+real(sp), pointer :: Ratm30         ! Relative atmospheric pressure to 30m ground at elevation (fraction)
+
+Patm   => dayvars(grid,day)%Patm
+Patm30 => dayvars(grid,day)%Patm30
+Ratm   => dayvars(grid,day)%Ratm
+Ratm30 => dayvars(grid,day)%Ratm30
+
+!----------
+
+! Elevation is used to get the atmospheric pressure (Diehl 1925 (from Lloyd and Farquhar 1994))
+! Code copied from ARVE-DGVM by Leo Lai (Jul 2021)
+Ratm = (1.0 - elev(grid) / 44308.) ** 5.2568         ! Multiply fraction by standard atm for pressure level in Pa
+
+! Also calculate the reference height pressure (30m above ground) (same ref as above)
+Ratm30 = (1.0 - (elev(grid) + 30._dp) / 44308.) ** 5.2568
+
+Patm = Pstd * Ratm
+
+Patm30 = Pstd * Ratm30
+
+end subroutine elev_Ratm
+
+!----------------------------------------------------------------------------------------------------------------
+
+subroutine radpet(grid,dyr,iter)
+
+! Calculate total downwelling shortwave radiation and PET (potential evapotranspiration)
+
+use parametersmod, only : midday
+use orbitmod,      only : orbitpars,toa_insolation,orbit
+use metvarsmod,    only : genvars,dayvars,gridlat,topovars
+
+implicit none
+
+! Arguments
+integer(i4),     intent(in) :: grid     ! Grid number
+integer,         intent(in) :: dyr      ! Day of year
+integer,         intent(in) :: iter     ! Iteration number
 
 !local variables
-real(dp) :: lat   !latitude
-real(sp) :: temp  !daytime mean temperature (C)
-real(sp) :: prec  !total precipitation
-real(sp) :: cldf  !cloud cover fraction
-real(sp) :: tdew  !dewpoint temperature (C)
-real(sp) :: tcm   !temperature of the coldest month (of the year)
-real(sp) :: Pjj
+real(dp) :: lat       ! Latitude (degrees)
+real(sp) :: temp      ! Daytime mean temperature (degC)
+real(sp) :: prec      ! Total 24h precipitation (mm)
+real(sp) :: cldf      ! Cloud cover fraction (percent)
+real(sp) :: tdew      ! Dewpoint temperature (degC)
+real(sp) :: tcm       ! Temperature of the coldest month (of the year) (degC)
+real(sp) :: Ratm      ! Relative atmospheric pressure based on elevation (fraction)
+real(sp) :: Pjj       ! Water equitability index
 
 type(airmasspars) :: air
 
-real(sp) :: toa_sw  !top of the atmosphere downwelling shortwave rad (kJ m-2 d-1)
-real(sp) :: delta   !solar declination (degrees)
-real(sp) :: pet0    !previous value for PET (mm d-1)
-real(sp) :: direct  !direct beam surface downwelling shortwave (kJ m-2 d-1)
-real(sp) :: diffuse !diffuse surface downwelling shortwave (kJ m-2 d-1)
-real(sp) :: lw_rad  !net longwave (kJ m-2 d-1)
+real(sp) :: toa_sw    ! Top of the atmosphere downwelling shortwave rad (kJ m-2 d-1)
+real(sp) :: delta     ! Solar declination (degrees)
+real(sp) :: pet0      ! Previous value for PET (mm d-1)
+real(sp) :: direct    ! Direct beam surface downwelling shortwave (kJ m-2 d-1)
+real(sp) :: diffuse   ! Diffuse surface downwelling shortwave (kJ m-2 d-1)
+real(sp) :: lw_rad    ! Net longwave radiation (kJ m-2 d-1)
 
-real(sp) :: dayl    !day length (h)
-real(sp) :: sw_rad  !total surface downwelling shortwave (kJ m-2 d-1)
-real(sp) :: pet     !day potential evapotranspiraton (mm)
+real(sp) :: dayl      ! Daylength (h)
+real(sp) :: sw_rad    ! Total surface downwelling shortwave (kJ m-2 d-1)
+real(sp) :: pet       ! Daily potential evapotranspiraton (mm) (per day)
+
+real(sp) :: sloperad  ! Ratio of direct raditaion on sloped and flat surface
 
 !counters
 
@@ -196,10 +232,10 @@ integer :: i
 ! Get met variables for the day from module variable 'dayvars'
 lat = gridlat(grid)    ! assign latitude of the current gridcell
 
-! temp = 0.5 * (dayvars(grid,dyr)%tmax + dayvars(grid,dyr)%tmin)
 temp = dayvars(grid,dyr)%tmean
 prec = dayvars(grid,dyr)%prec
 cldf = dayvars(grid,dyr)%cldf
+Ratm = dayvars(grid,dyr)%Ratm
 Pjj  = dayvars(grid,dyr)%Pjj
 tcm  = minval(genvars%tmp(5:16))    ! genvar structure with +/- 4 months buffer
 
@@ -209,12 +245,14 @@ call airmass(lat,delta,dayl,Ratm,air)
 
 call surf_lw(iter,grid,dyr,temp,dayvars(grid,dyr)%tmin,cldf,dayl,lw_rad,tdew)
 
-i = 1
+!------
 
 pet  = 0.
 pet0 = 0.
 
-do !because of the weak dependence of surface shortwave on PET, we equilibrate PET and surf_sw
+i = 1
+
+do ! Because of the weak dependence of surface shortwave on PET, we equilibrate PET and surf_sw
 
   call surf_sw(Pjj,Ratm,toa_sw,cldf,dayl,air,prec,tcm,pet,direct,diffuse)
 
@@ -222,7 +260,12 @@ do !because of the weak dependence of surface shortwave on PET, we equilibrate P
 
   call netrad_pet(sw_rad,lw_rad,pet)
 
-  if (abs(pet - pet0) < 0.01 .or. i > 100) exit
+  if(abs(pet - pet0) < 0.01) exit
+
+  if (i > 100) then
+    write(0,*) 'No good stable solution for sw_rad and pet after 100 iterations'
+    exit
+  end if
 
   pet0 = pet
 
@@ -232,13 +275,21 @@ end do
 
 !write(stdout,'(7f10.3)')temp,prec,cldf,toa_sw,sw_rad,lw_rad,pet
 
-dayvars(grid,dyr)%tdew = tdew
-dayvars(grid,dyr)%dsol = delta
-dayvars(grid,dyr)%dayl = dayl
-dayvars(grid,dyr)%srad = sw_rad
-dayvars(grid,dyr)%dpet = pet
+! Calculate the slope and aspect effect on direct radiation budget (sloperad = slope/flat radiation ratio)
+! call radslope(grid,dyr,dayl,delta,lat,toa_sw,direct,diffuse,sloperad)
+!
+! topovars(grid)%sloperad = sloperad
 
-!write(stdout,'(a,3f12.4)')'radpet',sw_rad,lw_rad,pet
+dayvars(grid,dyr)%dsol     = delta
+dayvars(grid,dyr)%dayl     = dayl
+dayvars(grid,dyr)%srad     = sw_rad
+dayvars(grid,dyr)%srad_dir = direct
+dayvars(grid,dyr)%srad_dif = diffuse
+dayvars(grid,dyr)%lrad     = lw_rad
+dayvars(grid,dyr)%dpet     = pet
+
+! Calculate tdew after getting final stable solution for pet and sw_rad
+call calctdew(grid,dyr)
 
 end subroutine radpet
 
@@ -928,12 +979,310 @@ end function F
 
 !----------------------------------------------------------------------------------------------------------------
 
+subroutine radslope(grid,day,dayl,delta,lat,toa_sw,direct,diffuse,sloperad)
+
+! Subroutine to calculate slope and aspect effect on direct beam shortwave radiation
+! Equations taken from MT-CLIM model (mtclim43.c), coded for ALVAR by Leo O Lai (Aug, 2021)
+
+use parametersmod, only : d2r,r2d,pi
+use metvarsmod,    only : topovars
+
+integer(i4), intent(in)  :: grid          ! Grid number
+integer(i4), intent(in)  :: day           ! Julian day (1 to 366)
+real(sp),    intent(in)  :: dayl          ! Daylength (hours)
+real(sp),    intent(in)  :: delta         ! Solar declination angle (degrees)
+real(dp),    intent(in)  :: lat           ! Local latitude (degrees)
+real(sp),    intent(in)  :: toa_sw        ! Top of the atmosphere downwelling shortwave rad (kJ m-2 d-1)
+real(sp),    intent(in)  :: direct        ! Direct beam surface downwelling shortwave (kJ m-2 d-1)
+real(sp),    intent(in)  :: diffuse       ! Diffuse surface downwelling shortwave (kJ m-2 d-1)
+real(sp),    intent(out) :: sloperad      ! Ratio of shortwave radiation on slope to flat surface (sloperad/flatrad)
+
+real(sp), parameter :: secperrad = 13750.9871         ! seconds per raidna of hour angle
+real(sp), parameter :: mindecl   = -0.4092729         ! Minimum declination angle (radians)
+real(sp), parameter :: radperday = 0.017214           ! Radians per day
+real(sp), parameter :: radperdeg = 0.01745329         ! Radians per degree
+real(sp), parameter :: daysoff   = 11.25              ! Julian day offset of winter solstice
+
+real(sp), parameter, dimension(21) :: optam = [2.90,3.05,3.21,3.39,3.69,3.82,4.07,4.37,4.72,5.12,5.60, &
+                                              6.18,6.88,7.77,8.90,10.39,12.44,15.36,19.79,26.96,30.00]
+
+! Local variables
+real(sp) :: dslope            ! Topographic slope (degrees)
+real(sp) :: daspect           ! Topographic aspect (degrees)
+real(sp) :: rlat              ! Local latitude (radians)
+real(sp) :: rdsol             ! Solar declination angle (radians)
+real(sp) :: rslope            ! Topographic slope (radians)
+real(sp) :: raspect           ! Topographic aspect (radians)
+
+real(sp) :: coslat            ! Cosine of latitude
+real(sp) :: sinlat            ! Sine of latitude
+real(sp) :: cosslp            ! Cosine of slope
+real(sp) :: sinslp            ! Sine of slope
+real(sp) :: cosasp            ! Cosine of aspect
+real(sp) :: sinasp            ! Sine of aspect
+real(sp) :: cosdecl           ! Cosine of solar declination angle
+real(sp) :: sindecl           ! Sine of solar declination angle
+real(sp) :: coszeh            ! Cosine of zenith angle for east horizon
+real(sp) :: coszwh            ! Cosine of zenith angle for west horizon
+real(sp) :: cosegeom
+real(sp) :: sinegeom
+
+real(sp) :: cosh              ! Cosine of hour angle
+real(sp) :: sinh              ! Sine of the hour angle
+real(sp) :: dt                ! Duration of hour angle time-step (seconds)
+real(sp) :: dh                ! Angle of hour angle time-step (radians)
+real(sp) :: h                 ! Hour angle (radians)
+
+real(sp) :: hss               ! Hour angle at sunset (radians) >> -hss is the hour angle at sunrise
+real(sp) :: bsg1              ! Beam-slope geometry component 1
+real(sp) :: bsg2              ! Beam-slope geometry component 2
+real(sp) :: bsg3              ! Beam-slope geometry component 3
+
+real(sp) :: cza               ! Cosine of solar zenith angle
+real(sp) :: cbsa              ! Cosine of beam-slope angle
+
+real(sp) :: dir_flat_topa     ! Direct top-of-atmosphere shortwave radiation on flat surface (kJ m-2 d-1)
+real(sp) :: dir_beam_topa     ! Direct top-of-atmosphere shortwave radiation on sloped surface (kJ m-2 d-1)
+
+real(sp) :: sum_flatrad       ! Sum of direct shortwave radiation on flat surface (kJ m-2 d-1)
+real(sp) :: sum_sloperad      ! Sum of direct shortwave radiation on sloped surface during hours with direct beam (kJ m-2 d-1)
+
+real(sp) :: am
+integer(i4) :: ami
+
+!------
+! Point to variables
+dslope  = topovars(grid)%slope
+daspect = topovars(grid)%aspect
+
+! Convert degrees to radians
+rlat    = lat * d2r
+rslope  = dslope * d2r
+raspect = daspect * d2r
+
+rdsol = mindecl * cos((day + daysoff) * radperday)
+
+!------
+! Set up the trigonometric variables for lat, slope and aspect
+if (rlat > 1.5707)  rlat = 1.5707
+if (rlat < -1.5707) rlat = -1.5707
+
+coslat = cos(rlat)
+sinlat = sin(rlat)
+cosslp = cos(rslope)
+sinslp = sin(rslope)
+cosasp = cos(raspect)
+sinasp = sin(raspect)
+
+cosdecl = cos(rdsol)
+sindecl = sin(rdsol)
+
+cosegeom = coslat * cosdecl
+sinegeom = sinlat * sindecl
+
+!------
+! Calculate hour angle of sunset
+hss = (dayl * 3600 / 2.0) / secperrad
+
+! Calculate bean-slope geometry (bsg)
+bsg1 = -sinslp * sinasp * cosdecl;
+bsg2 = (-cosasp * sinslp * sinlat + cosslp * coslat) * cosdecl
+bsg3 = (cosasp * sinslp * coslat + cosslp * sinlat) * sindecl
+
+!------
+! Set time step (3600 seconds = 1 hour)
+dt = 3600.
+dh = dt / secperrad
+
+h = -hss
+
+sum_sloperad = 0.0
+sum_flatrad = 0.0
+
+coszeh = cos(1.570796 - (rlat - rdsol))
+coszwh = cos(-1.570796 - (rlat - rdsol))
+
+! coszeh = cos(0.0*d2r + rslope)
+! coszwh = cos(180.0*d2r - rslope)
+
+do
+
+  cosh = cos(h)
+  sinh = sin(h)
+
+  cza = cosegeom * cosh + sinegeom
+
+  cbsa = sinh * bsg1 + cosh * bsg2 + bsg3
+
+  dir_flat_topa = 0.0
+
+  if (cza > 0.0) then
+
+    dir_flat_topa = toa_sw * cza
+
+    ! am = 1.0 / (cza + 0.0000001)
+    !
+    ! if (am > 2.9) then
+    !   ami = int(acos(cza) * d2r) - 69
+    !   if (ami < 0) ami = 0
+    !   if (ami > 20) ami = 20
+    !   am = optam(ami)
+    ! end if
+
+    sum_flatrad = sum_flatrad + dir_flat_topa
+
+  end if
+
+  !---
+
+  ! if (cbsa < 0) print *, h, acos(cza)*r2d,acos(coszeh)*r2d, acos(coszwh)*r2d,dslope,daspect
+
+  if ((h < 0.0 .and. acos(cza) > acos(coszeh) .and. cbsa > 0.0) .or. &
+      (h >= 0.0 .and. acos(cza) < acos(coszwh) .and. cbsa > 0.0)) then
+
+    sum_sloperad = sum_sloperad + toa_sw * cbsa
+
+  end if
+
+  ! print *, acos(cza)*r2d, acos(coszeh)*r2d, acos(coszwh)*r2d
+
+  !---
+
+  h = h + dh
+
+  if (h > hss) exit
+
+end do
+
+sloperad = sum_sloperad / sum_flatrad
+
+! if (topovars(grid)%elev > 920.) print *, topovars(grid)%elev, dayl, sloperad, sum_flatrad, sloperad/sum_flatrad, dslope, daspect, &
+!             acos(coszeh)*r2d, acos(coszwh)*r2d
+
+! print *, lat, dayl,delta,rdsol,dslope,rslope,daspect,raspect,coszeh,coszwh,hss
+
+
+end subroutine radslope
+
+!----------------------------------------------------------------------------------------------------------------
+
+subroutine calctdew(grid,day)
+
+use parametersmod, only : pi,d2r,r2d
+use metvarsmod,    only : genvars,dayvars,gridlon,gridlat
+
+implicit none
+
+integer(i4), intent(in) :: grid
+integer, intent(in) :: day
+
+real(sp), parameter :: a = 1.26   ! Constant for Ep formula in Kimball et al. (1997)
+real(sp), parameter :: c = 0.66   ! Constant for Ep formula in Kimball et al. (1997)
+
+real(sp) :: tmin
+real(sp) :: tmax
+real(sp) :: tmean
+real(sp) :: aprec    ! Annual rainfall in m
+
+real(sp) :: tmin_K
+real(sp) :: tmax_K
+real(sp) :: tmean_K
+
+real(sp) :: Lv    ! Latent heat of vaporization in J K-1
+real(sp) :: Pw    ! Water density in kg m-3
+real(sp) :: dSVP  ! Rate of change of saturation vapour pressure in Pa K-1
+real(dp) :: Ep    ! Potential evapotranspiration in kg m-2 s-1
+real(dp) :: EF    ! Ratio of Ep to annual precipitation (m)
+
+! real(sp) :: ampl  ! Seasonal variation in daylength in hour
+! real(sp) :: sunrise  ! Sunrise time
+! real(sp) :: sunset  ! Sunset time
+real(sp) :: dayl  ! Daylength in seconds
+! real(sp) :: dsol  ! Solar declination angle in degrees
+! real(sp) :: w  ! Elevation angle in degrees
+! real(sp) :: Ma    ! Mean anomaly of orbit in rad
+! real(sp) :: va    ! True anomaly of orbit in rad
+! real(sp) :: Rd    ! Actual distance between sun and Earth at yearday in Gm
+
+real(sp) :: Rn    ! Daily average insolation in W m-2
+real(sp) :: Gn    ! Daily average surface conductive energy flux in W m-2
+
+real(sp) :: tdew_K    ! Dew point temperature in degree Celcius
+real(sp) :: tdew
+! real(sp) :: RH
+! real(sp) :: Tw
+
+!---
+
+tmin = dayvars(grid,day)%tmin
+tmax = dayvars(grid,day)%tmax
+tmean = dayvars(grid,day)%tmean
+aprec = sum(genvars%pre(5:16))           ! Annual rainfall in mm
+dayl = dayvars(grid,day)%dayl * 3600.    ! Daylength in seconds
+
+!------
+
+tmean_K = tmean + 273.15
+tmin_K  = tmin + 273.15
+tmax_K  = tmax + 273.15
+
+!------
+
+! Density of water Graf (2009)
+Pw = 1000. * (1 - (((tmean - 3.9863) ** 2) / 508929.2) * ((tmean + 288.9414) / (tmean + 68.12963)))
+
+
+! dSVP = 6.1078 * exp((17.269 * tavg) / (237.3 + tavg)) * ((237.3 + tavg) * 17.269 - 17.269 * tavg) / ((237.3 + tavg) ** 2)   ! Running & Coughlan (1988)
+
+! dSVP = 100. * dSVP     ! Convert mbar to Pa
+
+
+Rn    = dayvars(grid,day)%srad * 1000. / (3600. * 24)
+Gn    = 0.1 * Rn                                          ! Kimball et al. (1997) estimation of surface conductive energy flux
+dSVP  = desdT(tmean_K)
+gamma = 65.05 + tmean_K * 0.064                           ! Psychrometer constant (Pa K-1)
+Lv    = 1.91846e6 * (tmean_K / (tmean_K - 33.91)) ** 2    ! Henderson-Sellers (1984) in Davis et al. (2017)
+
+!------
+
+Ep = a * (dSVP / (dSVP + gamma)) * (Rn - Gn) / Lv   ! Kimball et al. (1997)
+
+Ep = dayvars(grid,day)%dpet / 86400.      ! Convert dpet from mm d-1 to mm s-1
+
+! if (dayvars(grid,day)%dpet > 0.) print *, Ep * 86400, dayvars(grid,day)%dpet
+
+!------
+
+aprec = max(aprec, 30.0)
+aprec = aprec / 1000.     ! Convert mm to m of rainfall
+
+EF = ((Ep / Pw) * dayl) / aprec     ! Kimball et al. (1997)
+
+!------
+
+tdew_K = tmin_K * (-0.127 + 1.121 * (1.003 - 1.444 * EF + 12.312 * (EF**2) &      ! Kimball et al. (1997)
+         - 32.766 * (EF**3)) + 0.0006 * (tmax_K - tmin_K))
+
+tdew = tdew_K - 273.15
+
+! RH = 100 * (EXP((17.625*Td)/(243.04+Td))/EXP((17.625*tavg)/(243.04+tavg)))
+!
+! Tw = tavg * atan(0.151977 * sqrt(RH + 8.313659)) + atan(tavg + RH)            &
+!      - atan(RH - 1.676331) + 0.00391838 * (RH ** 1.5) * atan(0.023101 * RH)   &
+!      - 4.686035                 ! From Stull (2011) Wet-Bulb Temperature from Relative Humidity and Air Temperature
+
+
+dayvars(grid,day)%tdew = tdew
+
+end subroutine calctdew
+
+!----------------------------------------------------------------------------------------------------------------
+
 subroutine tdewpet(grid,d)
 
 ! Iterative subroutine to calculate dewpoint temperature and PET until stable solution
 
-use metvarsmod, only : dayvars
-use diurnaltempmod, only : calctdew
+use metvarsmod, only : dayvars,elev
 
 implicit none
 
@@ -942,17 +1291,32 @@ integer, intent(in) :: d
 
 real(sp), pointer :: tdew
 real(sp), pointer :: dpet
+real(sp), pointer :: Ratm     ! Relative atmospheric pressure to sea level (fraction)
+real(sp), pointer :: Ratm30   ! Relative atmospheric pressure to 30 m above sea level (fraction)
 
 real(sp) :: last_tdew
 real(sp) :: last_dpet
 real(sp) :: tdew_diff
 real(sp) :: dpet_diff
 
-integer :: i
+integer :: it
 
 
 tdew => dayvars(grid,d)%tdew
 dpet => dayvars(grid,d)%dpet
+Ratm => dayvars(grid,d)%Ratm
+Ratm30 => dayvars(grid,d)%Ratm30
+
+!----------
+
+! Elevation is used to get the atmospheric pressure (Diehl 1925 (from Lloyd and Farquhar 1994))
+! Code copied from ARVE-DGVM by Leo Lai (Jul 2021)
+Ratm = (1.0 - elev(grid) / 44308.) ** 5.2568         ! Multiply fraction by standard atm for pressure level in Pa
+
+! Also calculate the reference height pressure (30m above ground) (same ref as above)
+Ratm30 = (1.0 - (elev(grid) + 30._dp) / 44308.) ** 5.2568
+
+!----------
 
 last_tdew = tdew
 last_dpet = dpet
@@ -960,28 +1324,34 @@ last_dpet = dpet
 tdew_diff = 9999.
 dpet_diff = 9999.
 
+it = 1
 
-! print *,tdew_diff, dpet_diff, tdew, dpet
+do
 
-do i = 2, 10
+  call radpet(grid,d,it)
 
   call calctdew(grid,d)
-
-  call radpet(grid,d,1.,i)
 
   tdew_diff = tdew - last_tdew
   dpet_diff = dpet - last_dpet
 
-  ! if (tdew_diff < 0.) print *, i, tdew_diff, dpet_diff, tdew, dpet
-
   last_tdew = tdew
   last_dpet = dpet
 
-  if (abs(tdew_diff) < 0.01 .AND. abs(dpet_diff) < 0.01) exit
+  ! if (it > 500) print *, it, dayvars(grid,d)%srad, dayvars(grid,d)%dpet, dayvars(grid,d)%tdew
+
+  it = it + 1
+
+  if (abs(tdew_diff) < 0.1 .AND. abs(dpet_diff) < 0.1) exit
+
+  if (it > 1000) then
+    write(0,*) "No good stable solution for tdew and dpet after 1000 iterations"
+    exit
+  end if
 
 end do
 
-! print *, i, tdew_diff, dpet_diff,tdew, dpet
+! if ((tdew > 20. .or. dpet < 0.) .and. dpet /= 0.) print *, it, dayvars(grid,d)%tmin - tdew, dayvars(grid,d)%tmax,  dpet
 
 
 end subroutine tdewpet

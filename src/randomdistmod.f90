@@ -90,6 +90,8 @@ call ran_seed(geohash(lon(lon_loc),lat(lat_loc)), georndst(grid))    ! Get the g
 
 call ran_seed(ranu(georndst(grid)), georndst(grid))     ! Randomize the geohash derived state
 
+! call ran_seed(-1, georndst(grid))    ! Get the geohash dependent randomstate constant for HKbaseclim
+
 
 end subroutine genrndstate
 

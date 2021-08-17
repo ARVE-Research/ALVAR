@@ -407,6 +407,27 @@ ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
+!average 24h temperature
+
+ncstat = nf90_def_var(ofid,'tmean',nf90_short,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily average 24h temperature')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','degC')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
 !mean dewpoint temperature
 
 ncstat = nf90_def_var(ofid,'tdew',nf90_short,dimids(3:4),varid)
@@ -416,6 +437,27 @@ ncstat = nf90_put_att(ofid,varid,'long_name','daily mean dewpoint temperature')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','degC')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_i2)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'scale_factor',0.1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!mean 10m windspeed
+
+ncstat = nf90_def_var(ofid,'wind',nf90_short,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','daily mean 10m windspeed')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','m s-1')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing_i2)
@@ -570,6 +612,44 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!forest fire danger meter Mk5
+
+ncstat = nf90_def_var(ofid,'ForFireMk5',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','Forest fire danger meter Mark 5')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','unit')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+!forest fire danger meter Mk5
+
+ncstat = nf90_def_var(ofid,'sloperad',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','slope to flat direct beam radiation ratio')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','ratio')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+
 
 
 !----

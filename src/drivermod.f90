@@ -79,10 +79,10 @@ nt = t1 - t0 + 1          ! nt changes to actual count of number of elements inc
 !-------------------
 
 if (rank == 0) then
-  write(0,*)startyr,calcyrs
-  write(0,*)cntt,nt
-  write(0,*)t0,t1
-  write(0,*)p0,p1
+  write(0,*) startyr,calcyrs
+  write(0,*) cntt,nt
+  write(0,*) t0,t1
+  write(0,*) p0,p1
 end if
 
 !-------------------
@@ -225,8 +225,7 @@ end subroutine initmonvars
 
 subroutine initsoilvars()
 
-use simplesoilmod, only : soilvars
-use metvarsmod,    only : cnt
+use metvarsmod,    only : soilvars,cnt
 
 implicit none
 
@@ -243,6 +242,29 @@ allocate(soilvars(gridcount))
 
 
 end subroutine initsoilvars
+
+!---------------------------------------------------------------------
+
+
+subroutine inittopovars()
+
+use metvarsmod,    only : topovars,cnt
+
+implicit none
+
+integer :: gridcount
+integer :: i
+
+!-------------------
+
+gridcount = cnt(1)
+
+!-------------------
+
+allocate(topovars(gridcount))
+
+
+end subroutine inittopovars
 
 !---------------------------------------------------------------------
 

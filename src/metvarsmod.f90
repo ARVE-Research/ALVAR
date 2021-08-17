@@ -4,9 +4,6 @@ use parametersmod, only : i2,i4,sp,dp
 use orbitmod,      only : orbitpars
 
 ! This module contains the data structures that are read, calculated and stored by other subroutines
-! Contains:
-! --- full monthly array from a single netCDF file read (mon_metvars)
-! --- full daily array of variables produced by gwgenmod (day_metvars)
 
 !---------------------------------------------------------------------
 
@@ -48,34 +45,114 @@ type(gwgen_vars), target :: genvars
 
 type day_metvars
   ! Derived datatype for the daily met variables output
+  real(sp) :: Ratm        ! Relative atmospheric pressure to sea-level (fraction)
+  real(sp) :: Ratm30      ! Relative atmospheric pressure to 30m above sea-level (fraction)
+  real(sp) :: Patm        ! Atmospheric pressure to sea-level (Pa)
+  real(sp) :: Patm30      ! Atmospheric pressure to 30m above sea-level (Pa)
 
-  real(sp) :: prec    ! 24 hour total precipitation (mm)
-  real(sp) :: tmin    ! 24 hour mean minimum temperature (degC)
-  real(sp) :: tmax    ! 24 hour mean maximum temperature (degC)
-  real(sp) :: cldf    ! 24 hour mean cloud cover fraction 0=clear sky, 1=overcast (fraction)
-  real(sp) :: wind    ! wind speed (m s-1)
+  real(sp) :: prec        ! 24 hour total precipitation (mm)
+  real(sp) :: tmin        ! 24 hour mean minimum temperature (degC)
+  real(sp) :: tmax        ! 24 hour mean maximum temperature (degC)
+  real(sp) :: cldf        ! 24 hour mean cloud cover fraction 0=clear sky, 1=overcast (fraction)
+  real(sp) :: wind        ! wind speed (m s-1)
 
-  ! New added variables for PET calculations (Leo O Lai 16 Apr 2021)
-  real(sp) :: tmean   ! 24 hour mean temperature (degC)
-  real(sp) :: tday    ! mean daytime temperature (degC)
-  real(sp) :: tnight  ! mean nighttime temperature (degC)
-  real(sp) :: Pjj     ! precipitation equitability index for calculating PET
-  real(sp) :: tdew    ! dew point temperature (degC)
-  ! real(sp) :: tdew2
-  real(sp) :: rhum    ! relative humidity (%)
-  real(sp) :: dsol    ! solar declination angle (degree)
-  real(sp) :: dayl    ! daylength (h)
-  real(sp) :: srad    ! downwelling surface shortwave radiation (kJ m-2 d-1)
-  real(sp) :: dpet    ! total potential evapotranspiration (mm)
-  real(sp) :: daet    ! total actual evapotranspiration (mm)
-  real(sp) :: alpha   ! ratio of daily AET/PET (fraction)
-  real(sp) :: vpd     ! average daytime saturation vapor pressure deficit (Pa)
+  ! New added variables (Leo O Lai 16 Apr 2021)
+  real(sp) :: tmean       ! 24 hour mean temperature (degC)
+  real(sp) :: tday        ! mean daytime temperature (degC)
+  real(sp) :: tnight      ! mean nighttime temperature (degC)
+  real(sp) :: Pjj         ! precipitation equitability index for calculating PET
+  real(sp) :: tdew        ! dew point temperature (degC)
+  real(sp) :: rhum        ! relative humidity (%)
+  real(sp) :: dsol        ! solar declination angle (degree)
+  real(sp) :: dayl        ! daylength (h)
+  real(sp) :: srad        ! downwelling surface shortwave radiation (kJ m-2 d-1)
+  real(sp) :: srad_dir    ! direct beam downwelling shortwave raditaion (kJ m-2 d-1)
+  real(sp) :: srad_dif    ! diffuse downwelling shortwave raditaion (kJ m-2 d-1)
+  real(sp) :: lrad        ! upswelling surface longwave radiation (kJ m-2 d-1)
+  real(sp) :: dpet        ! total potential evapotranspiration (mm)
+  real(sp) :: daet        ! total actual evapotranspiration (mm)
+  real(sp) :: alpha       ! ratio of daily AET/PET (fraction)
+  real(sp) :: vpd         ! average daytime saturation vapor pressure deficit (Pa)
+
+  ! Fire index variables
+  real(sp) :: DF          ! Drought factor
+  real(sp) :: KBDI        ! Keetch-Byram Drought Index (mm equivalent)
+  real(sp) :: ForFireMk5  ! Forest fire danger index Mark 5 meter
 
   real(dp), dimension(24) :: hprec    ! hourly precipitation (mm)
 
 end type day_metvars
 
 type(day_metvars), target, allocatable, dimension(:,:) :: dayvars ! Dimension allocate from number of days in year (365 or 366)
+
+!---------------------------------------------------------------------
+
+! Number of soil layers
+integer(i4), parameter :: nl = 6
+
+type soildata
+  ! Derived datatype for soil layer variables
+  real(sp), dimension(nl) :: sand       ! Sand content by mass (percent)
+  real(sp), dimension(nl) :: clay       ! Clay content by mass (percent)
+  real(sp), dimension(nl) :: cfvo       ! Course fragment content by volume (percent) --> Vcf variable in ARVE-DGVM
+  real(sp), dimension(nl) :: OrgM       ! Organic matter content by mass (percent)
+
+  real(sp), dimension(nl) :: Vsand      ! Sand content by volume (percent)
+  real(sp), dimension(nl) :: Vclay      ! Clay content by volume (percent)
+  real(sp), dimension(nl) :: Vsilt      ! Silt content by volume (percent)
+  real(sp), dimension(nl) :: VOrgM      ! Organic matter content by volume (percent)
+  real(sp), dimension(nl) :: rock       ! Course fragment content by mass (fraction)
+
+  real(sp), dimension(nl) :: bulk       ! Soil bulk density (kg m-3)
+  real(sp), dimension(nl) :: whc        ! Soil water holding capcity / available water content (mm)
+  real(sp), dimension(nl) :: Ksat       ! Soil water saturated conductivity (mm s-1)
+  real(sp), dimension(nl) :: Tsat       ! Soil water volumetric water content at saturation (fraction / m3 m-3)
+  real(sp), dimension(nl) :: Tpor       ! Soil volumetric porosity (liquid minus ice content (or stones?)) (fraction)
+  real(sp), dimension(nl) :: Ffrz       ! Fractional impermeable area as a function of soil ice content at a layer (fraction)
+  real(sp), dimension(nl) :: Tfield     ! Soil water volumetric content at field capacity (Psi = -33 kPa)   (fraction / m3 m-3)
+  real(sp), dimension(nl) :: Twilt      ! Soil water volumetric content at wilting point (Psi = -1500 kPa)   (fraction / m3 m-3)
+  real(sp), dimension(nl) :: Psat       ! Soil water matric potential at saturation (mm)
+  real(sp), dimension(nl) :: Bexp       ! Soil water B exponent used in the Brooks & Corey Pedotransfer Functions
+
+  real(sp), dimension(nl) :: Csolid     ! Soil solids volumetric heat capcity at layer midpoint (J m-3 K-1)
+  real(sp), dimension(nl) :: Ksolid     ! Soil mineral thermal conductivity at layer midpoint (W m-1 K-1)
+  ! real(sp), dimension(nl) :: Kdrysolid  !
+  real(sp), dimension(nl) :: Kdry       ! Soil thermal conductivity of dry natural soil (W m-1 K-1)
+
+  real(sp), dimension(nl) :: Wliq       ! Soil liquid water content at layer midpoint (mm)
+  real(sp), dimension(nl) :: Wice       ! Soil ice content at layer midpoint (mm)
+  real(sp), dimension(nl) :: Tsoil      ! Soil temperature (K)
+  real(sp), dimension(nl) :: Tsoiln     ! Soil temperature for precious timestep (K)
+  real(sp), dimension(nl) :: Tliq       ! Soil volumetric water content (fraction / m3 m-3) / Fractional soil water content
+  real(sp), dimension(nl) :: Tice       ! Soil volumetric ice content (fraction / m3 m-3) / Fraction soil ice content
+  real(sp), dimension(nl) :: Psi        ! Soil water potential
+  real(sp), dimension(nl) :: Psi_eq     ! Restriction for min of soil potential (mm)
+  real(sp), dimension(nl) :: Ku         ! Soil water instantaneous (unsaturated) conductivity across layer boundary (mm s-1)
+
+  real(sp) :: zw                        ! Mean water table depth (dimensionless)
+  real(sp) :: fsat                      ! Saturated fraction / partial contributing area
+  real(sp) :: Waquif_a                  ! Water in unconfined aquifer below soil (mm)
+  real(sp) :: Waquif_t                  ! Water in aquifer within soil column (mm).
+  real(sp) :: dTliq_b
+
+end type soildata
+
+type(soildata), target, allocatable, dimension(:) :: soilvars   ! Dimension allocate to number of gridcells
+
+!---------------------------------------------------------------------
+
+type topo_vars
+  ! Derived datatype for topographic variables
+
+  real(sp) :: elev      ! Elevation (m)
+  real(sp) :: slope     ! Slope (deg)
+  real(sp) :: aspect    ! Aspect (deg)
+
+  real(sp) :: sloperad      ! slope ratio
+
+end type topo_vars
+
+type(topo_vars), target, allocatable, dimension(:) :: topovars    ! Dimension allocate by number of gridcells
 
 !---------------------------------------------------------------------
 
@@ -92,6 +169,9 @@ real(dp),    allocatable, dimension(:)   :: lon
 real(dp),    allocatable, dimension(:)   :: lat
 real(dp),    allocatable, dimension(:)   :: time
 integer(i4), allocatable, dimension(:,:) :: indx
+
+! Allocatable arrays for elevation (m)
+real(sp), allocatable, dimension(:) :: elev
 
 ! Module variable for storing lon and lat that user-specified for printing
 real(dp) :: clon

@@ -1,8 +1,7 @@
 module aetalphamod
 
 use parametersmod, only : i4,sp,dp
-use metvarsmod,    only : dayvars,cnt
-use simplesoilmod, only : soilvars
+use metvarsmod,    only : dayvars,soilvars,cnt
 
 implicit none
 

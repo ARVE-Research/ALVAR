@@ -27,49 +27,54 @@ contains
 
 !-----------------------------------------------------------------------
 
-subroutine hourlyprec(grid,year,day)
+subroutine hourlyprec(year,grid,day)
+
+! Subroutine written by Leo O Lai (Jul 2021)
 
 use metvarsmod,  only : dayvars
 
 !arguments
-integer(i4), intent(in) :: grid
 integer(i4), intent(in) :: year
+integer(i4), intent(in) :: grid
 integer(i4), intent(in) :: day       ! Julian day (1 to 366)
 
-integer(i4) :: month
-integer(i4) :: sday
-integer(i4) :: eday
+integer(i4) :: month                 ! Current month (1 to 12)
+integer(i4) :: sday                  ! Index of start day of current month
+integer(i4) :: eday                  ! Index of end day of current month
 
-!pointers
-real(sp),               pointer :: dprec      !daily 24 hour total precipitaiton (mm)
-real(dp), dimension(:), pointer :: hprec      !hourly temperature (mm)
+! Pointers
+real(sp),               pointer :: dprec        ! 24h total precipitaiton of current day (mm)
+real(dp), dimension(:), pointer :: hprec        ! Hourly temperature (mm)
 
-real(sp), dimension(:), allocatable :: prec
-real(sp), dimension(:), allocatable :: tmean
-real(sp), dimension(:), allocatable :: rhum
+! Met variables
+real(sp), dimension(:), allocatable :: prec     ! Monthly array of daily 24h total precipitation (mm)
+real(sp), dimension(:), allocatable :: tmean    ! Monthly array of daily mean temperature (C)
+real(sp), dimension(:), allocatable :: rhum     ! Monthly array of daily mean humidity (%)
 
-real(sp) :: mean_1
-real(sp) :: var_1
-real(sp) :: skew_1
-real(sp) :: dryi_1
+! Hourly precipitation regression variables for gamma random number generator
+real(sp) :: mean_1             ! Mean of hourly precipitation
+real(sp) :: var_1              ! Variance of hourly precipitation
+real(sp) :: skew_1             ! Skewness of hourly precipitation
+real(sp) :: dryi_1             ! Dry interval of hourly precipitation
 
-integer(i4) :: dry_hour
-integer(i4) :: wet_hour
+integer(i4) :: dry_hour        ! Number of dry hours in current day
+integer(i4) :: wet_hour        ! Number of wet hours in current day
 
+real(dp) :: shape              ! Shape parameter of gamma distribution
+real(dp) :: scale              ! Scale parameter of gamma distribution
+
+! Other variables
 real(sp),    dimension(24) :: ran
 real(sp),    dimension(24) :: sort_val
 integer(i4), dimension(24) :: sort_loc
 real(sp)                   :: val
 integer(i4)                :: loc
 
-real(dp) :: shape
-real(dp) :: scale
-
 real(dp) :: diff
-
 integer :: i
 
 !------
+! Get daily met variables of the current month, calculate start and end array index of the month
 
 call getmonth(day, month, sday, eday)
 
@@ -77,7 +82,7 @@ allocate(prec(eday-sday+1))
 allocate(tmean(eday-sday+1))
 allocate(rhum(eday-sday+1))
 
-prec = dayvars(grid,sday:eday)%prec
+prec  = dayvars(grid,sday:eday)%prec
 tmean = dayvars(grid,sday:eday)%tmean
 rhum  = dayvars(grid,sday:eday)%rhum
 
@@ -103,11 +108,15 @@ else                       ! Wet day
   ! Get hourly rainfall statistics (variance, skewness and wet interval) using disaggregation
   ! regression model from Beuchat et al. (2011)
   if (dprec == sum(prec)) then    ! only one wet day in month
-    var_1 = 0.1
+
+    var_1  = 0.1
     skew_1 = 0.01
     dryi_1 = 0.5
+
   else
+
     call hprec_regression(prec,tmean,rhum,var_1,skew_1,dryi_1)
+
   end if
 
   !------
@@ -149,9 +158,14 @@ else                       ! Wet day
 
     hprec(loc) = ran_gamma_num(shape, scale, hprec_rndst)
 
+    ! Round to zero if hourly prec is less than 1.e-2
+    if (hprec(loc) < 0.01) hprec(loc) = 0.
+
   end do
 
   !------
+
+  ! if (dprec > 20.) print *, sum(hprec), dprec, dprec - sum(hprec), wet_hour
 
   ! Compare and check hourly precipitation with daily 24h total value
   diff = sum(hprec) / dprec
@@ -162,8 +176,6 @@ else                       ! Wet day
   end where
 
 end if
-
-! if (dprec > 200.) print *, hprec
 
 
 deallocate(prec)

@@ -1,8 +1,8 @@
 module netcdfinputmod
 
 use parametersmod, only : i2,i4,sp,dp
-use metvarsmod,    only : xlen,ylen,ilen,tlen,lon,lat,indx,time,srt,cnt,cntt,p0,p1,monvars
-use simplesoilmod, only : nl,zpos,soilvars
+use metvarsmod,    only : xlen,ylen,ilen,tlen,lon,lat,indx,time,elev,srt,cnt,cntt,p0,p1,monvars,soilvars
+use soilstatemod,  only : nl,zpos
 use outputmod,     only : infompi
 use errormod,      only : ncstat,netcdf_err
 use getdatamod,    only : readdata
@@ -12,6 +12,7 @@ use mpi
 implicit none
 
 character(100), parameter :: soilfile = './soil30m_list-formatted.nc'
+character(100), parameter :: topofile = '/home/leolaio/grid2list_hktopo/topofile_integrated_list-formatted.nc'
 
 contains
 
@@ -40,6 +41,10 @@ real(sp), allocatable, dimension(:,:) :: wet        ! number of days in the mont
 real(sp), allocatable, dimension(:,:) :: cld        ! mean monthly cloud cover (fraction)
 real(sp), allocatable, dimension(:,:) :: wnd        ! mean monthly 10m windspeed (m s-1)
 
+integer(i4), allocatable, dimension(:) :: var_in
+real(sp)    :: scale_factor
+real(sp)    :: add_offset
+integer(i2) :: missing_value
 
 integer :: i
 
@@ -83,10 +88,10 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 ! ----------------------------------------------------
 ! Read variable IDs and values
 
-allocate(lon(xlen))       ! Allocate length to longitude array
-allocate(lat(ylen))       ! Allocate length to latitude array
-allocate(time(tlen))      ! Allocate length to time array
-allocate(indx(xlen,ylen)) ! Allocate length to index array
+allocate(lon(xlen))         ! Allocate length to longitude array
+allocate(lat(ylen))         ! Allocate length to latitude array
+allocate(time(tlen))        ! Allocate length to time array
+allocate(indx(xlen,ylen))   ! Allocate length to index array
 
 ncstat = nf90_inq_varid(ifid,"lon",varid)                ! Get variable ID for longitude
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
@@ -113,6 +118,33 @@ ncstat = nf90_get_var(ifid,varid,time)                   ! Get variable values f
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 ! ----------------------------------------------------
+! Read in elevation data from input file
+
+allocate(var_in(ilen))
+allocate(elev(ilen))      ! Allocate length to index array
+
+ncstat = nf90_inq_varid(ifid,'elv',varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(ifid,varid,var_in,start=[srt(1)],count=[cnt(1)])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(ifid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(ifid,varid,"scale_factor",scale_factor)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(ifid,varid,"add_offset",add_offset)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in /= missing_value)
+  elev = real(var_in) * scale_factor + add_offset
+! elsewhere
+!   elev = -9999.
+end where
+
+! ----------------------------------------------------
 ! Read in variables from netcdf file by each gridcell
 srt = srt
 cnt = cnt
@@ -130,6 +162,8 @@ call readdata(ifid,'pre',srt,cnt,pre(:,p0:p1))
 call readdata(ifid,'wet',srt,cnt,wet(:,p0:p1))
 call readdata(ifid,'cld',srt,cnt,cld(:,p0:p1))
 call readdata(ifid,'wnd',srt,cnt,wnd(:,p0:p1))
+
+! write(0,*) 'ok read data', xlen, ylen, tlen, ilen, cnt
 
 !---------------------------------------------------------------------
 ! copy first and last year into buffers at each end
@@ -216,11 +250,11 @@ gridcount = cnt(1)
 ncstat = nf90_open(soilfile,nf90_nowrite,sfid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)           !
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_inq_varid(sfid,"zpos",varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_get_var(sfid,varid,zpos)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+! ncstat = nf90_inq_varid(sfid,"zpos",varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_get_var(sfid,varid,zpos)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 ! -----------------------------------------------------
 ! INPUT: Read in sand composition
@@ -254,7 +288,7 @@ deallocate(var_in)
 deallocate(values)
 
 ! -----------------------------------------------------
-! INPUT: Read in sand composition
+! INPUT: Read in clay composition
 
 allocate(var_in(gridcount,nl))
 allocate(values(gridcount,nl))
@@ -285,7 +319,7 @@ deallocate(var_in)
 deallocate(values)
 
 ! -----------------------------------------------------
-! INPUT: Read in sand composition
+! INPUT: Read in course gravel composition
 
 allocate(var_in(gridcount,nl))
 allocate(values(gridcount,nl))
@@ -323,5 +357,141 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 end subroutine soildatainput
 
+!---------------------------------------------------------------------
+
+subroutine topodatainput(info)
+
+! Read in the full array all gridcells and all layers, of topographic variales (slope and aspect)
+
+use metvarsmod, only : topovars
+
+implicit none
+
+type(infompi), target, intent(in) :: info
+
+integer :: tfid
+integer :: dimid
+integer :: varid
+
+integer(i4) :: gridstart
+integer(i4) :: gridcount
+
+integer(i2), allocatable, dimension(:) :: var_in
+real(sp),    allocatable, dimension(:) :: var_in_r
+real(sp),    allocatable, dimension(:) :: values
+
+real(sp)    :: scale_factor
+real(sp)    :: add_offset
+integer(i2) :: missing_value
+
+integer :: i
+
+!------
+
+gridstart = srt(1)
+gridcount = cnt(1)
+
+! -----------------------------------------------------
+! OPEN file
+
+ncstat = nf90_open(topofile,nf90_nowrite,tfid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)           !
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+! -----------------------------------------------------
+! INPUT: Read in elevation
+
+allocate(var_in(gridcount))
+allocate(values(gridcount))
+
+ncstat = nf90_inq_varid(tfid,"elv",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(tfid,varid,var_in,start=[gridstart],count=[gridcount])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(tfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(tfid,varid,"scale_factor",scale_factor)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in /= missing_value)
+  values = real(var_in) * scale_factor
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  topovars(i)%elev = values(i)
+end do
+
+deallocate(var_in)
+deallocate(values)
+
+! -----------------------------------------------------
+! INPUT: Read in slope
+
+allocate(var_in_r(gridcount))
+allocate(values(gridcount))
+
+ncstat = nf90_inq_varid(tfid,"slope",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(tfid,varid,var_in_r,start=[gridstart],count=[gridcount])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(tfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in_r /= missing_value)
+  values = var_in_r
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  topovars(i)%slope = values(i)
+end do
+
+deallocate(var_in_r)
+deallocate(values)
+
+! -----------------------------------------------------
+! INPUT: Read in aspect
+
+allocate(var_in_r(gridcount))
+allocate(values(gridcount))
+
+ncstat = nf90_inq_varid(tfid,"aspect",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(tfid,varid,var_in_r,start=[gridstart],count=[gridcount])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(tfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in_r /= missing_value)
+  values = var_in_r
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  topovars(i)%aspect = values(i)
+end do
+
+deallocate(var_in_r)
+deallocate(values)
+
+!------
+
+ncstat = nf90_close(tfid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+
+end subroutine topodatainput
+
+!---------------------------------------------------------------------
 
 end module netcdfinputmod
