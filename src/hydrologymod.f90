@@ -1,6 +1,6 @@
 module hydrologymod
 
-! Module copied from LPJ-LMFire
+! Module adapted from LPJ-LMFire and ARVE-DGVM for soil hydrology
 
 use parametersmod, only : i2,i4,sp,dp,missing_sp,Tfreeze
 
@@ -43,10 +43,11 @@ real(sp), allocatable, dimension(:)   :: Wliq_surf
 
 contains
 
-subroutine soilwater(rank,year,grid,day,hour)
+subroutine soilwater(rank,year,grid,day,i)
 
 ! Adapted from ARVE-DGVM for ALVAR model by Leo O Lai (Aug, 2021)
 
+use utilitiesmod, only : tridiag
 use metvarsmod,   only : dayvars,soilvars,cnt,lprint,gprint
 use soilstatemod, only : nl,dz,dzmm,zpos,zposmm,zipos,ziposmm
 
@@ -56,8 +57,9 @@ integer(i4), intent(in) :: rank
 integer(i4), intent(in) :: year
 integer(i4), intent(in) :: grid
 integer(i4), intent(in) :: day
-integer(i4), intent(in) :: hour
+integer(i4), intent(in) :: i
 
+logical , pointer :: validcell
 real(sp), pointer, dimension(:) :: Ksat       ! Soil water saturated conductivity (mm s-1)
 real(sp), pointer, dimension(:) :: Tsat       ! Soil water volumetric water content at saturation (fraction / m3 m-3)
 real(sp), pointer, dimension(:) :: Tpor       ! Soil volumetric porosity (liquid minus ice content (or stones?)) (fraction)
@@ -77,9 +79,18 @@ real(sp), pointer               :: zw         ! Mean water table depth (m)
 real(sp), pointer               :: fsat       ! Saturated fraction / partial contributing area (fraction)
 real(sp), pointer               :: dTliq_b
 
-real(sp), pointer :: dayl                     ! Daylength (h)
-real(sp), pointer :: aet                      ! Daily actual evapotranspiration (mm d-1)
-real(dp), pointer :: hprec                    ! Hourly precipitation (mm)
+integer(i4), pointer :: dayhour               ! day time hours (h) --> from current day sunrise to sunset
+integer(i4), pointer :: nighthour             ! night time hours (h) --> from current day sunset to next day sunrise
+integer(i4), pointer :: sunrise               ! Current day sunrise hour
+integer(i4), pointer :: sunset                ! Current day sunset hour
+integer(i4), pointer :: sunrise_n             ! next day sunrise hour
+real(sp),    pointer :: dayl                  ! Daylength (h)
+real(sp),    pointer :: aet                   ! Daily actual evapotranspiration (mm d-1)
+real(dp),    pointer, dimension(:) :: hprec   ! Hourly precipitation (mm)
+real(dp),    pointer, dimension(:) :: hprec_n ! Next day hourly precipitation (mm)
+
+real(dp), allocatable, dimension(:) :: prec_tot     ! Current time-step total precipitation (day or night) (mm)
+real(dp), allocatable, dimension(:) :: aet_tot      ! Current time-step total actual evaptranspiration (day or night) (mm)
 
 real(sp)  :: dt                       ! Time-step length (seconds)
 
@@ -88,10 +99,6 @@ real(sp)    :: zwmm                   ! Mean water table depth (mm)
 real(sp)    :: dzmm_aq                ! Aqufier thickness
 
 ! Subroutine variables
-integer(i4) :: dayhours_half          ! Half of daylenght (h)
-integer(i4) :: sunrise                ! Hour of sunrise relative to noon (12 - dayhours_half)
-integer(i4) :: sunset                 ! Hour of sunset relative to noon (12 + dayhours_half)
-
 real(sp) :: haet                      ! Hourly actual evapotranspiration (mm h-1)
 real(sp) :: qover                     ! Surface liquid water runoff (mm s-1)
 real(sp) :: qinfl                     ! Surface liquid water infiltration into top soil layer (mm s-1)
@@ -145,18 +152,22 @@ real(sp) :: fdec     ! Decay factor (m-1) for 0.5 degree grid, see CLM 4.0 pg. 1
 real(sp) :: fmax     ! % of pixels in a grid cell whose topographic index is >= grid cell mean topographic index
 
 integer :: l
+integer :: h
+integer :: hr
 
 !-------------------------
 
-if (year == 1 .and. grid == 1 .and. day == 1 .and. hour == 1) then
+if (year == 1 .and. grid == 1 .and. day == 1 .and. i == 1) then
   allocate(Wliq_surf(cnt(1)))
 end if
 
-if (year == 1. .and. day == 1 .and. hour == 1) then
+if (year == 1. .and. day == 1 .and. i == 1) then
   Wliq_surf(grid) = 0.
 end if
 
 !-------------------------
+
+validcell => soilvars(grid)%validcell
 
 Ksat   => soilvars(grid)%Ksat
 Tsat   => soilvars(grid)%Tsat
@@ -177,344 +188,352 @@ zw     => soilvars(grid)%zw
 fsat   => soilvars(grid)%fsat
 dTliq_b=> soilvars(grid)%dTliq_b
 
-dayl   => dayvars(grid,day)%dayl
-aet    => dayvars(grid,day)%daet
-hprec  => dayvars(grid,day)%hprec(hour)
+dayhour   => dayvars(grid,day)%dayhour
+nighthour => dayvars(grid,day)%nighthour
+sunrise   => dayvars(grid,day)%sunrise
+sunset    => dayvars(grid,day)%sunset
+sunrise_n => dayvars(grid,day)%sunrise_n
+dayl      => dayvars(grid,day)%dayl
+aet       => dayvars(grid,day)%daet
+hprec     => dayvars(grid,day)%hprec
+hprec_n   => dayvars(grid,day+1)%hprec
 
 !-------------------------
-! Saturated fraction (with fractional permeability added)
-      ! NOTE fmax is the percent of pixels in a grid cell whose topographic index is larger than or equal to the grid cell
-      ! mean topographic index. It is read-in in arve_dgvm.f90 into the iovariables soil structure.
-      ! water table depth is needed here in meters.
-! Eq. 7.54 in CLM3.0 (Leo Lai, Aug 2021)
-zw = zipos(nl+1)
+! Compile met variables based on dayhour / nighthour
 
-do l = 1, nl
-  zw = zw - (Tliq(l) / Tsat(l)) * dz(l)
-end do
-if (zw < 0.) zw = 0
+if (i == 1) then            ! Day time
+  hr = dayhour
+else if (i == 2) then       ! Night time
+  hr = nighthour
+end if
 
-! zw = zipos(nl) - 1.0      ! Mean water table depth
-zwmm = zw * 1.e3
+allocate(prec_tot(hr))
+allocate(aet_tot(hr))
 
-! Determine which soil layer corresponds to the one immediately above the present water table height.
-jint = nl
-do l = 2, nl
-  if(zw <= zipos(l)) then
-     jint = l-1
-     exit
-  end if
-end do
+! Calculate prec and aet total for current day/night timestep
+if (i == 1) then            ! Day time
 
-! Determine aqufier thickness
-if(jint < nl) then
-  dzmm_aq = dzmm(nl)
-else
-  dzmm_aq = zwmm - zposmm(nl)
+  prec_tot = hprec(sunrise:sunset-1)
+
+  aet_tot = aet / real(dayhour)
+
+else if (i == 2) then       ! Night time
+
+  prec_tot(1:(24-sunset+1))  = hprec(sunset:24)
+  prec_tot((24-sunset+2):hr) = hprec_n(1:sunrise_n-1)
+
+  aet_tot = 0.0
+
 end if
 
 !-------------------------
-! Calculate sunrise and sunset hour relative to noon
-
-dayhours_half = ceiling(dayl / 2.)
-
-dayhours_half = max(1, dayhours_half)
-
-sunrise = 12 - dayhours_half
-sunset  = 12 + dayhours_half
-
-!-------------------------
-
-haet = aet / (real(dayhours_half) * 2.)
-
-if (hour < sunrise .or. hour > sunset) haet = 0.
-
-if (aet < 0.) haet = 0.
-
-!-------------------------
-
-! Tliq = fraction of soil moisture volume actual
-! Wliq = actuall mm of soil moisture
-! Tsat = fraction of saturation volume
-
-if (Ksat(1) <= 0.) Ksat = 2.e-3
-if (Tsat(1) <= 0.) Tsat = 0.33
-if (Psat(1) <= 0.) Psat = -250.
-if (Tliq(1) <= 0.) Tliq = Tsat * 0.3
-if (Wliq(1) <= 0.) Wliq = Tliq * dz * pliq
-if (Bexp(1) <= 0.) Bexp = 2.
-
-! hprec = 0.0
-haet  = 0.0
-
-rootfeff = 0.
-
 ! Time-step dt = 3600 for now as subroutine written for constant 1 hour time-step
 dt = 3600.
 
-hprec = hprec * (dt / 3600.)
-
-! Hourly disaggregated precipitation
-qliq = hprec      ! mm
-qliq0 = qliq      ! mm - include this variable for now for code consistency in ARVE-DGVM
-
-! Substitute surface evporation with actual evapotranspirtaiton for me as net surface water change
-qseva = haet      ! mm
-qsdew = 0.        ! Assume to be zero for now
-
-! Update surface water content
-Wliq_surf(grid) = max(0. , Wliq_surf(grid) + (qliq + qsdew - qseva) * dt)     !Eq. 7.25 (mm)
-
-Wice(1:nl) = 0.
-Tice(1:nl) = 0.                                                   ! Eq. 7.56 >>> but assumed to have zero ice for now
-Tpor(1:nl) = max(0.01, (Tsat(1:nl) - Tice(1:nl)))
-Tliq(1:nl) = min(Tpor(1:nl), Wliq(1:nl) / (dz(1:nl) * pliq))      ! Eq 7.57
-T_wat(1:nl) = Tice(1:nl) + Tliq(1:nl)
-
 !-------------------------
+! Run water model in hourly time-step based on length of dayhour / nighthour
+hourloop : do h = 1, hr
 
-! Fractional permeability from Niu & Yang, Hydrometeorology 2006,v. 7,p. 937
-do l = 1, nl
-  if (Wliq(l) > 0.) then
-    Ffrz(l) = max(0.0, (exp(-alpha * (1.0 - 0.0)) - ealpha) / (1.0 - ealpha))
+  ! Saturated fraction (with fractional permeability added)
+        ! NOTE fmax is the percent of pixels in a grid cell whose topographic index is larger than or equal to the grid cell
+        ! mean topographic index. It is read-in in arve_dgvm.f90 into the iovariables soil structure.
+        ! water table depth is needed here in meters.
+  ! Eq. 7.54 in CLM3.0 (Leo Lai, Aug 2021)
+  zw = zipos(nl+1)
+
+  do l = 1, nl
+    zw = zw - (Tliq(l) / Tsat(l)) * dz(l)
+  end do
+  if (zw < 0.) zw = 0
+
+  ! zw = zipos(nl) - 1.0      ! Mean water table depth
+  zwmm = zw * 1.e3
+
+  ! Determine which soil layer corresponds to the one immediately above the present water table height.
+  jint = nl
+  do l = 2, nl
+    if(zw <= zipos(l)) then
+       jint = l-1
+       exit
+    end if
+  end do
+
+  ! Determine aqufier thickness
+  if(jint < nl) then
+    dzmm_aq = dzmm(nl)
   else
-    Ffrz(l) = max(0.0, (exp(-alpha * (1.0 - (Wice(l) / (Wice(l) + Wliq(l))))) - ealpha) / (1.0 - ealpha))      ! zero when noe ice / snow
-  end if
-end do
-
-fmax = 0.9        ! not entire sure that this means... but it controls runoff (Leo Lai Jul 2021)
-fdec = 0.5        ! decay factor   ARVE-params
-
-fsat = (1.0 - Ffrz(1)) * fmax * exp(-0.5 * zw * fdec) + Ffrz(1)       ! Soil saturated fraction, one when no ice
-
-! fsat = wfact * min(1.0, exp(-zw))       !Eq. 7.53 CLM3.0 (Leo Lai, Aug 2021)
-
-fsatfrac = fsat
-
-! Maximum soil infiltration capacity
-ffilled_pores = max(0.01, (Tliq(1) / (max(Timp,(Tsat(1) - Tice(1))))))   !CLM 4.0 eq. 7.65
-funsat = max(0.01, (1.0 - fsatfrac))                                       !CLM 4.0 eq. 7.65
-Seffpor = max(0.0, ((ffilled_pores - fsatfrac) / funsat))                     !CLM 4.0 eq. 7.65
-
-varV = Bexp(1) * Psat(1) / (0.5 * dzmm(1))        !CLM 4.0 eq. 7.66 layer thickness in mm!
-
-qinflmax = Ksat(1) * (1.0 + varV * (Seffpor - 1.0)) !CLM 4.0 eq. 7.64
-
-!-------------------------
-
-! Calculate surface runoff and infiltration
- if (Tpor(1) < Timp) then    !qover is liquid water surface runoff, qliq0 is liquid water reaching soil surface.
-  qover = qliq0
- else
-  qover = fsatfrac * qliq0 + (1.0 - fsatfrac) * max(0.0, qliq0 - qinflmax)
- end if
-
-! Calculate how much water inflitrates the soil (assume no snow cover)
-qinfl = qliq0 - qover
-
-!-------------------------
-
-! Calculate the equilibrium water content based on the water table depth (CLM 4 Eqns 7.120 - 7.122)
-do l = 1, nl
-
-  if (zwmm < ziposmm(l)) then   !fully saturated when zw is less than the layer top
-
-    vol_eq(l) = Tsat(l)
-
-  ! Use the weighted average from the saturated part (depth > zw) and the equilibrium solution for the
-  ! rest of the layer
-  else if (zwmm < ziposmm(l+1) .and. zwmm > ziposmm(l)) then !CLM 4 Eqn 7.121
-
-     ! Find the equilbrium volumetric water content for the unsaturated part of the layer (Eqn. 7.122)
-    tempi = 1.0
-    temp0 = ((Psat(l) - zwmm + ziposmm(l)) / Psat(l))**(1.0 - 1.0 / Bexp(l))
-    voleq1 = Psat(l) * Tsat(l) / (1.0 - 1.0 / Bexp(l)) / (zwmm - ziposmm(l)) * (tempi - temp0)
-
-    ! Find the equilbrium volumetric water content for the total layer (Eqn. 7.121)
-    vol_eq(l) = (voleq1 * (zwmm - ziposmm(l)) + Tsat(l) * (ziposmm(l+1) - zwmm)) / (ziposmm(l+1) - ziposmm(l))
-    vol_eq(l) = min(Tsat(l), vol_eq(l))
-    vol_eq(l) = max(vol_eq(l), 0.0)
-
-  else  ! Layers fully above the water table (zw) (CLM 4 Eqn 7.120)
-
-    tempi = ((Psat(l) - zwmm + ziposmm(l+1)) / Psat(l))**(1.0 - 1.0 / Bexp(l))
-    temp0 = ((Psat(l) - zwmm + ziposmm(l)) / Psat(l))**(1.0 - 1.0 / Bexp(l))
-    vol_eq(l) = Psat(l) * Tsat(l) / (1.0 - 1.0 / Bexp(l)) / (ziposmm(l+1) - ziposmm(l)) * (tempi - temp0)
-    vol_eq(l) = max(vol_eq(l), 0.0)
-    vol_eq(l) = min(Tsat(l), vol_eq(l))
-
+    dzmm_aq = zwmm - zposmm(nl)
   end if
 
-    Psi_eq(l) = Psat(l) * (max(vol_eq(l) / Tsat(l),0.01_dp))**(-Bexp(l))  !CLM 4 Eqn 7.125
-    Psi_eq(l) = max(Pmax, Psi_eq(l))
+  !-------------------------
 
-end do
+  rootfeff = 0.
 
-!-------------------------
+  ! prec_tot = prec_tot * (dt / 3600.)
 
-! Hydraulic conductivity and soil matric potential and their derivatives
-! Based upon Campbell 1974
-! Similar to Eq. 7.70 in CLM3.0 (Leo Lai, Aug 2021)
-do l = 1, nl
+  ! Hourly disaggregated precipitation
+  qliq = prec_tot(h)   ! mm
+  qliq0 = qliq      ! mm - include this variable for now for code consistency in ARVE-DGVM
 
-  s1 = 0.5 * (T_wat(l) + T_wat(min(nl,l+1))) / (0.5 * (Tsat(l) + Tsat(min(nl,l+1))))
-  s1 = min(1.0, s1)
-  s2 = Ksat(l) * s1**(2.0 * Bexp(l) + 3.0)
+  ! Substitute surface evporation with actual evapotranspirtaiton for me as net surface water change
+  qseva = aet_tot(h)  ! mm
+  qsdew = 0.        ! Assume to be zero for now
 
-  !CLM 4.0 Eqn. 7.80
-  Ku(l) = (1.0 - 0.5 * (Ffrz(l) + Ffrz(min(nl,l+1)))) * s2  * s1
+  ! Update surface water content
+  Wliq_surf(grid) = max(0. , Wliq_surf(grid) + (qliq + qsdew - qseva) * dt)     !Eq. 7.25 (mm)
 
-  !CLM 4.0 Eqn. 7.115
-  ddKuTliq(l) = (1.0 - 0.5 * (Ffrz(l) + Ffrz(min(nl,l+1)))) * (2.0 * Bexp(l) + 3.0)&
-                            * s2  * 0.5 / Tsat(l)
+  Wice(1:nl) = 0.
+  Tice(1:nl) = 0.                                                   ! Eq. 7.56 >>> but assumed to have zero ice for now
+  Tpor(1:nl) = max(0.01, (Tsat(1:nl) - Tice(1:nl)))
+  Tliq(1:nl) = min(Tpor(1:nl), Wliq(1:nl) / (dz(1:nl) * pliq))      ! Eq 7.57
+  T_wat(1:nl) = Tice(1:nl) + Tliq(1:nl)
 
-  ! Calc the soil wetness
-  Sr(l) = min(1.0, ((Tliq(l) + Tice(l)) / Tsat(l)))
-  Sr(l) = max(0.01, Sr(l))
+  !-------------------------
 
-  Psi(l) = Psat(l) * Sr(l)**(-Bexp(l))
-  Psi(l) = max(Pmax, Psi(l))
+  ! Fractional permeability from Niu & Yang, Hydrometeorology 2006,v. 7,p. 937
+  do l = 1, nl
+    if (Wliq(l) > 0.) then
+      Ffrz(l) = max(0.0, (exp(-alpha * (1.0 - 0.0)) - ealpha) / (1.0 - ealpha))
+    else
+      Ffrz(l) = max(0.0, (exp(-alpha * (1.0 - (Wice(l) / (Wice(l) + Wliq(l))))) - ealpha) / (1.0 - ealpha))      ! zero when noe ice / snow
+    end if
+  end do
 
-  ddPsiTliq(l) = -Bexp(l) * Psi(l) / (Sr(l) * Tsat(l))
+  fmax = 0.9        ! not entire sure that this means... but it controls runoff (Leo Lai Jul 2021)
+  fdec = 0.5        ! decay factor   ARVE-params
 
-end do
+  fsat = (1.0 - Ffrz(1)) * fmax * exp(-0.5 * zw * fdec) + Ffrz(1)       ! Soil saturated fraction, one when no ice
 
-!-------------------------------------------------
-! Set up r, a, b, and c vectors for tridiagonal solution
+  ! fsat = wfact * min(1.0, exp(-zw))       !Eq. 7.53 CLM3.0 (Leo Lai, Aug 2021)
 
-! Node l=1 (top)
-l = 1
+  fsatfrac = fsat
 
-  Fin = qinfl
-  dterm = zposmm(l+1) - zposmm(l)
-  dPsi_eq = Psi_eq(l+1) - Psi_eq(l)
-  nterm = (Psi(l+1) - Psi(l)) - dPsi_eq
-  Fout = -Ku(l) * nterm / dterm
-  ddFoutTliq1 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
-  ddFoutTliq2 = -( Ku(l) * ddPsiTliq(l+1) + nterm * ddKuTliq(l)) / dterm
+  ! Maximum soil infiltration capacity
+  ffilled_pores = max(0.01, (Tliq(1) / (max(Timp,(Tsat(1) - Tice(1))))))   !CLM 4.0 eq. 7.65
+  funsat = max(0.01, (1.0 - fsatfrac))                                       !CLM 4.0 eq. 7.65
+  Seffpor = max(0.0, ((ffilled_pores - fsatfrac) / funsat))                     !CLM 4.0 eq. 7.65
 
-  rvect(l) =  Fin - Fout - rootfeff(l)
-  avect(l) =  0._dp
-  bvect(l) =  dzmm(l) * (1._dp/dt) + ddFoutTliq1
-  cvect(l) =  ddFoutTliq2
+  varV = Bexp(1) * Psat(1) / (0.5 * dzmm(1))        !CLM 4.0 eq. 7.66 layer thickness in mm!
 
-!----------
-! Middle soil layers (l = 2 to gnl-1)
-do l = 2, nl-1
+  qinflmax = Ksat(1) * (1.0 + varV * (Seffpor - 1.0)) !CLM 4.0 eq. 7.64
 
-  dterm = zposmm(l) - zposmm(l-1)
-  dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
-  nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
-  Fin    = -Ku(l-1) * nterm / dterm
-  ddFinTliq0 = -(-Ku(l-1) * ddPsiTliq(l-1) + nterm * ddKuTliq(l-1)) / dterm
+  !-------------------------
 
-  ddFinTliq1 = -( Ku(l-1) * ddPsiTliq(l)   + nterm * ddKuTliq(l-1)) / dterm
-  dterm = zposmm(l+1) - zposmm(l)
-  dPsi_eq = Psi_eq(l+1) - Psi_eq(l)
-  nterm = (Psi(l+1) - Psi(l)) - dPsi_eq
-  Fout = -Ku(l) * nterm / dterm
-  ddFoutTliq1 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
-  ddFoutTliq2 = -( Ku(l) * ddPsiTliq(l+1) + nterm * ddKuTliq(l)) / dterm
+  ! Calculate surface runoff and infiltration
+   if (Tpor(1) < Timp) then    !qover is liquid water surface runoff, qliq0 is liquid water reaching soil surface.
+    qover = qliq0
+   else
+    qover = fsatfrac * qliq0 + (1.0 - fsatfrac) * max(0.0, qliq0 - qinflmax)
+   end if
 
-  rvect(l) =  Fin - Fout - rootfeff(l)
-  avect(l) = -ddFinTliq0
-  bvect(l) =  dzmm(l) / dt - ddFinTliq1 + ddFoutTliq1
-  cvect(l) =  ddFoutTliq2
+  ! Calculate how much water inflitrates the soil (assume no snow cover)
+  qinfl = qliq0 - qover
 
-end do
+  !-------------------------
 
-!----------
-! Mode l=gnl (bottom)
-l = nl
+  ! Calculate the equilibrium water content based on the water table depth (CLM 4 Eqns 7.120 - 7.122)
+  do l = 1, nl
 
-if (l > jint) then !water table is in soil column
+    if (zwmm < ziposmm(l)) then   !fully saturated when zw is less than the layer top
 
-  dterm = zposmm(l) - zposmm(l-1)
-  dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
-  nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
-  dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
-  nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
-  Fin = -Ku(l-1) * nterm / dterm
+      vol_eq(l) = Tsat(l)
 
-  ddFinTliq0 = -(-Ku(l-1) * ddPsiTliq(l-1) + nterm * ddKuTliq(l-1)) / dterm
-  ddFinTliq1 = -( Ku(l-1) * ddPsiTliq(l)   + nterm * ddKuTliq(l-1)) / dterm
-  Fout =  0._dp
-  ddFoutTliq1 = 0._dp
+    ! Use the weighted average from the saturated part (depth > zw) and the equilibrium solution for the
+    ! rest of the layer
+    else if (zwmm < ziposmm(l+1) .and. zwmm > ziposmm(l)) then !CLM 4 Eqn 7.121
 
-  rvect(l) =  Fin - Fout - rootfeff(l)
-  avect(l) = -ddFinTliq0
-  bvect(l) =  dzmm(l) / dt - ddFinTliq1 + ddFoutTliq1
-  cvect(l) =  0._dp
+       ! Find the equilbrium volumetric water content for the unsaturated part of the layer (Eqn. 7.122)
+      tempi = 1.0
+      temp0 = ((Psat(l) - zwmm + ziposmm(l)) / Psat(l))**(1.0 - 1.0 / Bexp(l))
+      voleq1 = Psat(l) * Tsat(l) / (1.0 - 1.0 / Bexp(l)) / (zwmm - ziposmm(l)) * (tempi - temp0)
 
-  !Next set up aquifer layer; hydrologically inactive
-  rvect(l+1) = 0._dp
-  avect(l+1) = 0._dp
-  bvect(l+1) = dzmm_aq / dt
-  cvect(l+1) = 0._dp
+      ! Find the equilbrium volumetric water content for the total layer (Eqn. 7.121)
+      vol_eq(l) = (voleq1 * (zwmm - ziposmm(l)) + Tsat(l) * (ziposmm(l+1) - zwmm)) / (ziposmm(l+1) - ziposmm(l))
+      vol_eq(l) = min(Tsat(l), vol_eq(l))
+      vol_eq(l) = max(vol_eq(l), 0.0)
 
-else ! water table is below soil column
+    else  ! Layers fully above the water table (zw) (CLM 4 Eqn 7.120)
 
-  ! Compute aquifer soil moisture as average of layer gnl and saturation
-  Sr(l) = max(0.5_dp * (1._dp + T_wat(l) / Tsat(l)), 0.01_dp)
-  Sr(l) = min(1.0_dp, Sr(l))
+      tempi = ((Psat(l) - zwmm + ziposmm(l+1)) / Psat(l))**(1.0 - 1.0 / Bexp(l))
+      temp0 = ((Psat(l) - zwmm + ziposmm(l)) / Psat(l))**(1.0 - 1.0 / Bexp(l))
+      vol_eq(l) = Psat(l) * Tsat(l) / (1.0 - 1.0 / Bexp(l)) / (ziposmm(l+1) - ziposmm(l)) * (tempi - temp0)
+      vol_eq(l) = max(vol_eq(l), 0.0)
+      vol_eq(l) = min(Tsat(l), vol_eq(l))
 
-  !Compute Psi for aquifer layer
-  Psi1 = Psat(l) * Sr(l)**(-Bexp(l))
-  Psi1 = max(Pmax, Psi1)
+    end if
 
-  !Compute ddPsiTliq for aquifer layer
-  ddPsiTliq1 = -Bexp(l) * Psi1 / (Sr(l) * Tsat(l))
+      Psi_eq(l) = Psat(l) * (max(vol_eq(l) / Tsat(l),0.01_dp))**(-Bexp(l))  !CLM 4 Eqn 7.125
+      Psi_eq(l) = max(Pmax, Psi_eq(l))
 
-  !First set up bottom layer of soil column
-  dterm = zposmm(l) - zposmm(l-1)
-  dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
-  nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
-  Fin = -Ku(l-1) * nterm / dterm
-  ddFinTliq0 = -(-Ku(l-1) * ddPsiTliq(l-1) + nterm * ddKuTliq(l-1)) / dterm
-  ddFinTliq1 = -( Ku(l-1) * ddPsiTliq(l)   + nterm * ddKuTliq(l-1)) / dterm
-  dterm = zposmm(l+1) - zposmm(l)
-  dPsi_eq = Psi_eq(l+1) - Psi_eq(l)
-  nterm = (Psi1 - Psi(l)) - dPsi_eq
-  Fout = -Ku(l) * nterm / dterm
-  ddFoutTliq1 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
-  ddFoutTliq2 = -( Ku(l) * ddPsiTliq1 + nterm * ddKuTliq(l)) / dterm
+  end do
 
-  rvect(l) =  Fin - Fout - rootfeff(l)
-  avect(l) = -ddFinTliq0
-  bvect(l) =  dzmm(l) / dt - ddFinTliq1 + ddFoutTliq1
-  cvect(l) =  ddFoutTliq2
+  !-------------------------
 
-  !next set up aquifer layer; dterm/nterm unchanged, qin=qout
-  Fin = Fout  !Fout from layer gnl
-  ddFinTliq0 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
-  ddFinTliq1 = -( Ku(l) * ddPsiTliq1   + nterm * ddKuTliq(l)) / dterm
-  Fout = 0._dp                  ! zero-flow bottom boundary condition
-  ddFoutTliq1 = 0._dp          ! zero-flow bottom boundary condition
+  ! Hydraulic conductivity and soil matric potential and their derivatives
+  ! Based upon Campbell 1974
+  ! Similar to Eq. 7.70 in CLM3.0 (Leo Lai, Aug 2021)
+  do l = 1, nl
 
-  rvect(l+1) =  Fin - Fout
-  avect(l+1) = -ddFinTliq0
-  bvect(l+1) =  dzmm_aq / dt - ddFinTliq1 + ddFoutTliq1
-  cvect(l+1) =  0._dp
+    s1 = 0.5 * (T_wat(l) + T_wat(min(nl,l+1))) / (0.5 * (Tsat(l) + Tsat(min(nl,l+1))))
+    s1 = min(1.0, s1)
+    s2 = Ksat(l) * s1**(2.0 * Bexp(l) + 3.0)
 
-end if
+    !CLM 4.0 Eqn. 7.80
+    Ku(l) = (1.0 - 0.5 * (Ffrz(l) + Ffrz(min(nl,l+1)))) * s2  * s1
 
-! Tridiagonal solver to calculate change in water content in each layer
+    !CLM 4.0 Eqn. 7.115
+    ddKuTliq(l) = (1.0 - 0.5 * (Ffrz(l) + Ffrz(min(nl,l+1)))) * (2.0 * Bexp(l) + 3.0)&
+                              * s2  * 0.5 / Tsat(l)
 
-call tridiag(avect(1:nl+1),bvect(1:nl+1),cvect(1:nl+1),rvect(1:nl+1),dTliq(1:nl+1))
+    ! Calc the soil wetness
+    Sr(l) = min(1.0, ((Tliq(l) + Tice(l)) / Tsat(l)))
+    Sr(l) = max(0.01, Sr(l))
 
-!----------------------------
+    Psi(l) = Psat(l) * Sr(l)**(-Bexp(l))
+    Psi(l) = max(Pmax, Psi(l))
 
-! Renew the mass of liquid water (add in change from this timestep)
- Wliq(1:nl) = Wliq(1:nl) + dTliq(1:nl) * dzmm(1:nl)
+    ddPsiTliq(l) = -Bexp(l) * Psi(l) / (Sr(l) * Tsat(l))
 
- Tliq(1:nl) = Wliq(1:nl) / (dz(1:nl) * pliq)
+  end do
 
- call drainage(year,grid,dt)
+  !-------------------------------------------------
+  ! Set up r, a, b, and c vectors for tridiagonal solution
+
+  ! Node l=1 (top)
+  l = 1
+
+    Fin = qinfl
+    dterm = zposmm(l+1) - zposmm(l)
+    dPsi_eq = Psi_eq(l+1) - Psi_eq(l)
+    nterm = (Psi(l+1) - Psi(l)) - dPsi_eq
+    Fout = -Ku(l) * nterm / dterm
+    ddFoutTliq1 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
+    ddFoutTliq2 = -( Ku(l) * ddPsiTliq(l+1) + nterm * ddKuTliq(l)) / dterm
+
+    rvect(l) =  Fin - Fout - rootfeff(l)
+    avect(l) =  0._dp
+    bvect(l) =  dzmm(l) * (1._dp/dt) + ddFoutTliq1
+    cvect(l) =  ddFoutTliq2
+
+  !----------
+  ! Middle soil layers (l = 2 to gnl-1)
+  do l = 2, nl-1
+
+    dterm = zposmm(l) - zposmm(l-1)
+    dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
+    nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
+    Fin    = -Ku(l-1) * nterm / dterm
+    ddFinTliq0 = -(-Ku(l-1) * ddPsiTliq(l-1) + nterm * ddKuTliq(l-1)) / dterm
+
+    ddFinTliq1 = -( Ku(l-1) * ddPsiTliq(l)   + nterm * ddKuTliq(l-1)) / dterm
+    dterm = zposmm(l+1) - zposmm(l)
+    dPsi_eq = Psi_eq(l+1) - Psi_eq(l)
+    nterm = (Psi(l+1) - Psi(l)) - dPsi_eq
+    Fout = -Ku(l) * nterm / dterm
+    ddFoutTliq1 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
+    ddFoutTliq2 = -( Ku(l) * ddPsiTliq(l+1) + nterm * ddKuTliq(l)) / dterm
+
+    rvect(l) =  Fin - Fout - rootfeff(l)
+    avect(l) = -ddFinTliq0
+    bvect(l) =  dzmm(l) / dt - ddFinTliq1 + ddFoutTliq1
+    cvect(l) =  ddFoutTliq2
+
+  end do
+
+  !----------
+  ! Mode l=gnl (bottom)
+  l = nl
+
+  if (l > jint) then !water table is in soil column
+
+    dterm = zposmm(l) - zposmm(l-1)
+    dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
+    nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
+    dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
+    nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
+    Fin = -Ku(l-1) * nterm / dterm
+
+    ddFinTliq0 = -(-Ku(l-1) * ddPsiTliq(l-1) + nterm * ddKuTliq(l-1)) / dterm
+    ddFinTliq1 = -( Ku(l-1) * ddPsiTliq(l)   + nterm * ddKuTliq(l-1)) / dterm
+    Fout =  0._dp
+    ddFoutTliq1 = 0._dp
+
+    rvect(l) =  Fin - Fout - rootfeff(l)
+    avect(l) = -ddFinTliq0
+    bvect(l) =  dzmm(l) / dt - ddFinTliq1 + ddFoutTliq1
+    cvect(l) =  0._dp
+
+    !Next set up aquifer layer; hydrologically inactive
+    rvect(l+1) = 0._dp
+    avect(l+1) = 0._dp
+    bvect(l+1) = dzmm_aq / dt
+    cvect(l+1) = 0._dp
+
+  else ! water table is below soil column
+
+    ! Compute aquifer soil moisture as average of layer gnl and saturation
+    Sr(l) = max(0.5_dp * (1._dp + T_wat(l) / Tsat(l)), 0.01_dp)
+    Sr(l) = min(1.0_dp, Sr(l))
+
+    !Compute Psi for aquifer layer
+    Psi1 = Psat(l) * Sr(l)**(-Bexp(l))
+    Psi1 = max(Pmax, Psi1)
+
+    !Compute ddPsiTliq for aquifer layer
+    ddPsiTliq1 = -Bexp(l) * Psi1 / (Sr(l) * Tsat(l))
+
+    !First set up bottom layer of soil column
+    dterm = zposmm(l) - zposmm(l-1)
+    dPsi_eq = Psi_eq(l) - Psi_eq(l-1)
+    nterm = (Psi(l) - Psi(l-1)) - dPsi_eq
+    Fin = -Ku(l-1) * nterm / dterm
+    ddFinTliq0 = -(-Ku(l-1) * ddPsiTliq(l-1) + nterm * ddKuTliq(l-1)) / dterm
+    ddFinTliq1 = -( Ku(l-1) * ddPsiTliq(l)   + nterm * ddKuTliq(l-1)) / dterm
+    dterm = zposmm(l+1) - zposmm(l)
+    dPsi_eq = Psi_eq(l+1) - Psi_eq(l)
+    nterm = (Psi1 - Psi(l)) - dPsi_eq
+    Fout = -Ku(l) * nterm / dterm
+    ddFoutTliq1 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
+    ddFoutTliq2 = -( Ku(l) * ddPsiTliq1 + nterm * ddKuTliq(l)) / dterm
+
+    rvect(l) =  Fin - Fout - rootfeff(l)
+    avect(l) = -ddFinTliq0
+    bvect(l) =  dzmm(l) / dt - ddFinTliq1 + ddFoutTliq1
+    cvect(l) =  ddFoutTliq2
+
+    !next set up aquifer layer; dterm/nterm unchanged, qin=qout
+    Fin = Fout  !Fout from layer gnl
+    ddFinTliq0 = -(-Ku(l) * ddPsiTliq(l) + nterm * ddKuTliq(l)) / dterm
+    ddFinTliq1 = -( Ku(l) * ddPsiTliq1   + nterm * ddKuTliq(l)) / dterm
+    Fout = 0._dp                  ! zero-flow bottom boundary condition
+    ddFoutTliq1 = 0._dp          ! zero-flow bottom boundary condition
+
+    rvect(l+1) =  Fin - Fout
+    avect(l+1) = -ddFinTliq0
+    bvect(l+1) =  dzmm_aq / dt - ddFinTliq1 + ddFoutTliq1
+    cvect(l+1) =  0._dp
+
+  end if
+
+  ! Tridiagonal solver to calculate change in water content in each layer
+
+  call tridiag(avect(1:nl+1),bvect(1:nl+1),cvect(1:nl+1),rvect(1:nl+1),dTliq(1:nl+1))
+
+  !----------------------------
+
+  ! Renew the mass of liquid water (add in change from this timestep)
+  Wliq(1:nl) = Wliq(1:nl) + dTliq(1:nl) * dzmm(1:nl)
+
+  Tliq(1:nl) = Wliq(1:nl) / (dz(1:nl) * pliq)
+
+  call drainage(year,grid,dt)
+
+end do hourloop
 
 
 ! if (grid == 500 .and. rank == 40 .and. hprec > -1.) print *, year, day, hour, hprec, haet, qover, qinfl, Tliq/Tsat, dTliq_b
 
-! if (lprint .and. grid==gprint) print *, year, day, hour, hprec, haet, qover, qinfl, Ku(nl)*dt, Tliq/Tsat
+! if (lprint .and. grid==gprint) print *, year, day,i,hr, Tliq/Tsat
 
 
 end subroutine soilwater
@@ -590,8 +609,8 @@ end do
 
 !------------------
 ! Calculate lateral drainage from saturation fraction (fsat) (Eq. 7.117 & 7.118 CLM3.0)
-!
-!
+
+
 ! wb_sum1 = 0.
 ! wb_sum2 = 0.
 !
@@ -641,7 +660,6 @@ qdrai = qdrai * dt
 
 ! Update fractional soil water content
 Tliq(1:nl) = Wliq(1:nl) / (dz(1:nl) * pliq)
-
 
 end subroutine drainage
 
@@ -987,59 +1005,5 @@ if (peat) qdrai = 0.  !FLAG!! test
 
 end subroutine aquifier
 
-!=============================================================================================================
-
-subroutine tridiag(a,b,c,r,u)
-
-! Subroutine to solve triadiagonal system of equations
-
-! Solves for a vector u of size N the tridiagonal linear set using given by equation (2.4.1) using a
-! a serial algorithm. Input vectors b (diagonal elements) and r (right-hand side) have size N,
-! while a and c (off-diagonal elements) are not defined in the first and last elements, respectively.
-! Based on Numerical Recipes in F77/F90
-
-! Copied from ARVE-DGVM (Leo Lai, Jul 2021)
-
-implicit none
-
-
-real(dp), dimension(:), intent(in) :: a
-real(dp), dimension(:), intent(in) :: b
-real(dp), dimension(:), intent(in) :: c
-real(dp), dimension(:), intent(in) :: r
-real(dp), dimension(:), intent(out) :: u
-
-integer :: n
-integer :: k
-real(dp) :: bet
-real(dp), dimension(size(b)) :: gam
-
-!----
-
-n = size(b)
-
-bet = b(1)
-
-u(1) = r(1) / bet
-
-!decomposition and forward substitution
-
-do k = 2,n
-
-  gam(k) = c(k-1) / bet
-
-  bet = b(k) - a(k) * gam(k)
-
-  u(k) = (r(k) - a(k) * u(k-1)) / bet
-
-end do
-
-!backsubstitution
-
-do k = n-1,1,-1
-  u(k) = u(k) - gam(k+1) * u(k+1)
-end do
-
-end subroutine tridiag
 
 end module hydrologymod

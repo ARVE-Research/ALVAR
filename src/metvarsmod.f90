@@ -57,6 +57,14 @@ type day_metvars
   real(sp) :: wind        ! wind speed (m s-1)
 
   ! New added variables (Leo O Lai 16 Apr 2021)
+  real(sp) :: dayl           ! daylength (h)
+  real(sp) :: dayl_n         ! daylength of the next day (h)
+  integer(i4) :: sunrise     ! Current day sunrise hour (index of 24h hourly array)
+  integer(i4) :: sunset      ! Current day sunset hour (index of 24h hourly array)
+  integer(i4) :: sunrise_n   ! next day sunrise hour (index of 24h hourly array)
+  integer(i4) :: dayhour     ! day time hours (h) --> from current day sunrise to sunset
+  integer(i4) :: nighthour   ! night time hours (h) --> from current day sunset to next day sunrise
+
   real(sp) :: tmean       ! 24 hour mean temperature (degC)
   real(sp) :: tday        ! mean daytime temperature (degC)
   real(sp) :: tnight      ! mean nighttime temperature (degC)
@@ -64,7 +72,6 @@ type day_metvars
   real(sp) :: tdew        ! dew point temperature (degC)
   real(sp) :: rhum        ! relative humidity (%)
   real(sp) :: dsol        ! solar declination angle (degree)
-  real(sp) :: dayl        ! daylength (h)
   real(sp) :: srad        ! downwelling surface shortwave radiation (kJ m-2 d-1)
   real(sp) :: srad_dir    ! direct beam downwelling shortwave raditaion (kJ m-2 d-1)
   real(sp) :: srad_dif    ! diffuse downwelling shortwave raditaion (kJ m-2 d-1)
@@ -91,19 +98,22 @@ type(day_metvars), target, allocatable, dimension(:,:) :: dayvars ! Dimension al
 integer(i4), parameter :: nl = 6
 
 type soildata
+
+  logical :: validcell
+
   ! Derived datatype for soil layer variables
   real(sp), dimension(nl) :: sand       ! Sand content by mass (percent)
   real(sp), dimension(nl) :: clay       ! Clay content by mass (percent)
   real(sp), dimension(nl) :: cfvo       ! Course fragment content by volume (percent) --> Vcf variable in ARVE-DGVM
   real(sp), dimension(nl) :: OrgM       ! Organic matter content by mass (percent)
 
-  real(sp), dimension(nl) :: Vsand      ! Sand content by volume (percent)
-  real(sp), dimension(nl) :: Vclay      ! Clay content by volume (percent)
-  real(sp), dimension(nl) :: Vsilt      ! Silt content by volume (percent)
-  real(sp), dimension(nl) :: VOrgM      ! Organic matter content by volume (percent)
+  real(sp), dimension(nl) :: Vsand      ! Sand content by volume (fraction)
+  real(sp), dimension(nl) :: Vclay      ! Clay content by volume (fraction)
+  real(sp), dimension(nl) :: Vsilt      ! Silt content by volume (fraction)
+  real(sp), dimension(nl) :: VOrgM      ! Organic matter content by volume (fraction)
   real(sp), dimension(nl) :: rock       ! Course fragment content by mass (fraction)
-
   real(sp), dimension(nl) :: bulk       ! Soil bulk density (kg m-3)
+
   real(sp), dimension(nl) :: whc        ! Soil water holding capcity / available water content (mm)
   real(sp), dimension(nl) :: Ksat       ! Soil water saturated conductivity (mm s-1)
   real(sp), dimension(nl) :: Tsat       ! Soil water volumetric water content at saturation (fraction / m3 m-3)
@@ -118,6 +128,9 @@ type soildata
   real(sp), dimension(nl) :: Ksolid     ! Soil mineral thermal conductivity at layer midpoint (W m-1 K-1)
   ! real(sp), dimension(nl) :: Kdrysolid  !
   real(sp), dimension(nl) :: Kdry       ! Soil thermal conductivity of dry natural soil (W m-1 K-1)
+  real(sp), dimension(nl) :: Kl         ! Soil thermal conductivity across layer boundary (W m-1 K-1)
+  real(sp), dimension(nl) :: Cl         ! Instantaneous soil volumetric heat capacity at layer midpoint (J m-3 K-1)
+  real(sp), dimension(nl) :: Kh         ! Snow thermal conductivity at layer midpoint (W m-1 K-1)
 
   real(sp), dimension(nl) :: Wliq       ! Soil liquid water content at layer midpoint (mm)
   real(sp), dimension(nl) :: Wice       ! Soil ice content at layer midpoint (mm)
@@ -134,10 +147,37 @@ type soildata
   real(sp) :: Waquif_a                  ! Water in unconfined aquifer below soil (mm)
   real(sp) :: Waquif_t                  ! Water in aquifer within soil column (mm).
   real(sp) :: dTliq_b
+  real(sp) :: raw_b                     ! Aerodynamic resistance for latent heat transfer btwn bare ground & atmosphere (s m-1)
+  real(sp) :: rah_b                     ! Aerodynamic resistance for sensible heat transfer btwn bare ground & atmosphere (s m-1)
 
 end type soildata
 
 type(soildata), target, allocatable, dimension(:) :: soilvars   ! Dimension allocate to number of gridcells
+
+!---------------------------------------------------------------------
+
+type veg_vars
+
+  ! Derived datatype for vegetation variables
+  real(sp) :: gammastar     ! Photorespiratory compensation point (Pa)
+  real(sp) :: gpp0          ! Gross primary productivity under non-water stressed condition (g C m-2 d-1)
+  real(sp) :: gpp           ! Gross primary productivity under actual condition (g C m-2 d-1)
+  real(sp) :: gpp_tot       ! Total daily gross primary productivity (g C d-1)
+  real(sp) :: rd            ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
+  real(sp) :: chi           ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
+  real(sp) :: chi0          ! Optimal leaf internal / external CO2 partial pressure ratio (fraction)
+
+  real(sp) :: dgp           ! Optimal daily canopy conductance (mm m-2 s-1)
+  real(sp) :: dgc           ! Actual daily canopy conductance (mm m-2 s-1
+  real(sp) :: lai           ! LAI from data input (m2 m-2)
+  real(sp) :: sla           ! Specific leaf area (m2 gC-1)
+  real(sp) :: C_leaf        ! Leaf carbon (gC m-2)
+
+  integer(i4) :: biome      ! Biome classification from biome1
+
+end type veg_vars
+
+type(veg_vars), target, allocatable, dimension(:,:) :: vegvars   ! Dimension allocate to number of gridcells
 
 !---------------------------------------------------------------------
 
@@ -147,6 +187,8 @@ type topo_vars
   real(sp) :: elev      ! Elevation (m)
   real(sp) :: slope     ! Slope (deg)
   real(sp) :: aspect    ! Aspect (deg)
+  real(sp) :: cellarea  ! Area of gridcell (m2)
+  real(sp) :: areafrac  ! Ground area fraction in gridcell (fraction)
 
   real(sp) :: sloperad      ! slope ratio
 

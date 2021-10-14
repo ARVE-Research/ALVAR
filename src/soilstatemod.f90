@@ -106,9 +106,11 @@ real(sp) :: silt
 real(sp) :: T33       ! Water content at field capacity
 real(sp) :: T1500     ! Wilting point soil content
 
-logical,  allocatable, dimension(:) :: valid
+logical, allocatable, dimension(:) :: valid
 
 ! real(sp), pointer, dimension(:) :: zpos
+logical, pointer :: validcell
+
 real(sp), pointer, dimension(:) :: bulk
 real(sp), pointer, dimension(:) :: rock  ! Course fragment content by mass (percent)
 real(sp), pointer, dimension(:) :: OrgM  !(g m-2)
@@ -154,6 +156,8 @@ real(sp) :: dzOM      !interlayer transport of SOM (g m-2)
 real(sp) :: dzx       !excess change in top layer thickness
 
 !-------------------------
+
+validcell => soilvars(grid)%validcell
 
 bulk   => soilvars(grid)%bulk
 rock   => soilvars(grid)%rock
@@ -381,13 +385,17 @@ end do hydroloop
 
 !-------------------------
 
-where (.not. valid)  !assign a typical rock value for non-soil layers
-  ! whc  = 0.03
-  ! Ksat = 1.e-3
-  ! valid = .true.
+! assign a typical rock value for non-soil layers
+! whc  = 0.03
+! Ksat = 1.e-3
+! valid = .true.
 
-  bulk = missing_sp
-  rock = missing_sp
+validcell = .true.
+
+if (.not. valid(1)) validcell = .false.
+
+if (.not. validcell) then
+
   whc  = missing_sp
   Ksat = missing_sp
   Tsat = missing_sp
@@ -396,10 +404,12 @@ where (.not. valid)  !assign a typical rock value for non-soil layers
   Twilt = missing_sp
   Bexp = missing_sp
 
-  VOrgM = missing_sp
   Vsand = missing_sp
   Vclay = missing_sp
   Vsilt = missing_sp
+  VOrgM = missing_sp
+  rock = missing_sp
+  bulk = missing_sp
 
   Csolid = missing_sp
   Ksolid = missing_sp
@@ -413,8 +423,7 @@ where (.not. valid)  !assign a typical rock value for non-soil layers
   Tice = missing_sp
   Psi = missing_sp
 
-  valid = .true.
-end where
+end if
 
 !-------------------------
 

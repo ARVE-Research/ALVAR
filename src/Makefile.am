@@ -11,6 +11,7 @@ alvar_SOURCES =      \
 	daylengthmod.f90 	 \
 	metvarsmod.f90		 \
 	soilstatemod.f90   \
+	soilphysicsmod.f90 \
 	diurnaltempmod.f90 \
 	radiationmod.f90 	 \
 	randomdistmod.f90  \
@@ -19,6 +20,7 @@ alvar_SOURCES =      \
 	aetalphamod.f90    \
 	biome1mod.f90			 \
 	hydrologymod.f90   \
+	gppmod.f90         \
 	fireindexmod.f90   \
   getdatamod.f90     \
   outputmod.f90      \

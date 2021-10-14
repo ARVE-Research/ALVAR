@@ -5,20 +5,22 @@ module modelmod
 use parametersmod,   only : i2,i4,sp,dp
 use outputmod,       only : infompi,printgrid
 use randomdistmod,   only : genrndstate
-use metvarsmod,      only : monvars,dayvars,soilvars,startyr,calcyrs,genvars,dayvars,topovars, &
+use metvarsmod,      only : monvars,dayvars,soilvars,vegvars,startyr,calcyrs,genvars,dayvars,topovars, &
                             ndyear,srt,cnt,clon,clat,gridlon,gridlat,lprint,gprint
-use drivermod,       only : initdate,initlonlat,initmonvars,initsoilvars,inittopovars, &
+use drivermod,       only : initdate,initlonlat,initmonvars,initsoilvars,initvegvars,inittopovars, &
                             initgeorndst,copygenvars,initdayvars,saveclonlat
 use diurnaltempmod,  only : diurnaltemp,humidity
 use orbitmod,        only : orbit,calcorbitpars
 use radiationmod,    only : elev_Ratm,calcPjj,radpet,tdewpet,calcVPD,calctdew
 use hourlyprecmod,   only : hourlyprec
 use soilstatemod,    only : soilprep
+use soilphysicsmod,  only : soilthermalprop,resistance,soiltemperature
 use hydrologymod,    only : soilwater
 use aetalphamod,     only : aet_alpha
 use biome1mod,       only : initbiomevars,savebiomevars,calcbiome_year,calcbiome_mean
+use gppmod,          only : gpp,lai,leafcarbon
 use fireindexmod,    only : fireindex
-use netcdfinputmod,  only : metdatainput,soildatainput,topodatainput
+use netcdfinputmod,  only : metdatainput,soildatainput,topodatainput,LAIdatainput
 use netcdfoutputmod, only : netcdfoutput
 use gwgenmod,        only : gwgen
 use gwgenmodnew,     only : gwgen_new
@@ -62,15 +64,19 @@ call initdate(info,job,rank)        ! Initialize the start, count and date of th
 
 call initmonvars()                  ! Initilize the dimensions of the metvars variables (allocate by gridcount)
 
-call initsoilvars()                 ! Initialize the dimensions of the soilvar variales (allocate by gridcount)
+call initsoilvars()                 ! Initialize the dimensions of the soilvars variales (allocate by gridcount)
 
-! call inittopovars()                 ! Initialize the dimensions of the topovar variales (allocate by gridcount)
+call initvegvars()                  ! Initialize the dimensions of the vegvars variales (allocate by gridcount)
+
+call inittopovars()                 ! Initialize the dimensions of the topovar variales (allocate by gridcount)
 
 call metdatainput(info)             ! Read in full array of monthly variable series
 
 call soildatainput(info)            ! Read in full array of soil variables
 
-! call topodatainput(info)            ! Read in full array of topographic variables
+call topodatainput(info)            ! Read in full array of topographic variables
+
+call LAIdatainput(info)
 
 call initlonlat(info,job,rank)      ! Save lon and lat for each indexed grid
 
@@ -185,20 +191,44 @@ yearloop : do yr = 1, calcyrs
 
   dayloop2 : do d = 1, ndyear
 
-    hourloop : do i = 1, 24         ! 24 hours in a day
+    diurnalloop : do i = 1, 2         ! 1 = day, 2 = night
 
       gridloop_soilwater : do grid = 1, gridcount
 
-        call soilwater(rank,yr,grid,d,i)
+        ! if (soilvars(grid)%validcell) then
+
+          call soilwater(rank,yr,grid,d,i)
+
+          call soilthermalprop(grid)
+
+          call resistance(grid,d)
+
+          ! call soiltemperature(grid,d,i)
+
+          if (yr >= 1 .and. i == 1) call leafcarbon(grid,d)
+
+          if (yr >= 2 .and. i == 1) call lai(grid,d)
+
+          if (i == 1) call gpp(yr,grid,d)
+
+        ! end if
 
       end do gridloop_soilwater
 
-    end do hourloop
+    end do diurnalloop
+
+    if (d == ndyear) print *, rank,yr, d, sum(vegvars%gpp_tot)
 
   end do dayloop2
 
+  ! do grid = 1, gridcount
+  !
+  !   if (vegvars(grid,1)%gpp /= -9999.) vegvars(grid,:)%gpp = sum(vegvars(grid,:)%gpp)
+  !
+  ! end do
+
   ! Output variables into netcdf file in parallel
-  ! call netcdfoutput(info,job,yr)
+  call netcdfoutput(info,job,yr)
 
   deallocate(dayvars)
 

@@ -107,15 +107,16 @@ am_alvar_OBJECTS = parametersmod.$(OBJEXT) errormod.$(OBJEXT) \
 	coordsmod.$(OBJEXT) geohashmod.$(OBJEXT) statsmod.$(OBJEXT) \
 	utilitiesmod.$(OBJEXT) newsplinemod.$(OBJEXT) \
 	orbitmod.$(OBJEXT) daylengthmod.$(OBJEXT) metvarsmod.$(OBJEXT) \
-	soilstatemod.$(OBJEXT) diurnaltempmod.$(OBJEXT) \
-	radiationmod.$(OBJEXT) randomdistmod.$(OBJEXT) \
-	weathergenmod.$(OBJEXT) hourlyprecmod.$(OBJEXT) \
-	aetalphamod.$(OBJEXT) biome1mod.$(OBJEXT) \
-	hydrologymod.$(OBJEXT) fireindexmod.$(OBJEXT) \
-	getdatamod.$(OBJEXT) outputmod.$(OBJEXT) \
-	netcdfinputmod.$(OBJEXT) netcdfoutputmod.$(OBJEXT) \
-	gwgenmod.$(OBJEXT) gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) \
-	modelmod.$(OBJEXT) main.$(OBJEXT)
+	soilstatemod.$(OBJEXT) soilphysicsmod.$(OBJEXT) \
+	diurnaltempmod.$(OBJEXT) radiationmod.$(OBJEXT) \
+	randomdistmod.$(OBJEXT) weathergenmod.$(OBJEXT) \
+	hourlyprecmod.$(OBJEXT) aetalphamod.$(OBJEXT) \
+	biome1mod.$(OBJEXT) hydrologymod.$(OBJEXT) gppmod.$(OBJEXT) \
+	fireindexmod.$(OBJEXT) getdatamod.$(OBJEXT) \
+	outputmod.$(OBJEXT) netcdfinputmod.$(OBJEXT) \
+	netcdfoutputmod.$(OBJEXT) gwgenmod.$(OBJEXT) \
+	gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) modelmod.$(OBJEXT) \
+	main.$(OBJEXT)
 alvar_OBJECTS = $(am_alvar_OBJECTS)
 alvar_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_$(V))
@@ -318,6 +319,7 @@ alvar_SOURCES = \
 	daylengthmod.f90 	 \
 	metvarsmod.f90		 \
 	soilstatemod.f90   \
+	soilphysicsmod.f90 \
 	diurnaltempmod.f90 \
 	radiationmod.f90 	 \
 	randomdistmod.f90  \
@@ -326,6 +328,7 @@ alvar_SOURCES = \
 	aetalphamod.f90    \
 	biome1mod.f90			 \
 	hydrologymod.f90   \
+	gppmod.f90         \
 	fireindexmod.f90   \
   getdatamod.f90     \
   outputmod.f90      \

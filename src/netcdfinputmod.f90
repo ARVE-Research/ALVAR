@@ -12,7 +12,9 @@ use mpi
 implicit none
 
 character(100), parameter :: soilfile = './soil30m_list-formatted.nc'
-character(100), parameter :: topofile = '/home/leolaio/grid2list_hktopo/topofile_integrated_list-formatted.nc'
+character(100), parameter :: topofile = './world_slope_1800arcsec_list-formatted.nc'
+character(100), parameter :: LAIfile  = './LAI_mean_monthly_1981-2015_halfdeg_list-formatted.nc'
+! character(100), parameter :: topofile = '/home/leolaio/grid2list_hktopo/topofile_integrated_list-formatted.nc'
 
 contains
 
@@ -381,7 +383,7 @@ real(sp),    allocatable, dimension(:) :: var_in_r
 real(sp),    allocatable, dimension(:) :: values
 
 real(sp)    :: scale_factor
-real(sp)    :: add_offset
+real(sp)    :: add_offsetworld_slope_1800arcsec
 integer(i2) :: missing_value
 
 integer :: i
@@ -400,23 +402,23 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 ! -----------------------------------------------------
 ! INPUT: Read in elevation
 
-allocate(var_in(gridcount))
+allocate(var_in_r(gridcount))
 allocate(values(gridcount))
 
-ncstat = nf90_inq_varid(tfid,"elv",varid)
+ncstat = nf90_inq_varid(tfid,"elev",varid)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_get_var(tfid,varid,var_in,start=[gridstart],count=[gridcount])
+ncstat = nf90_get_var(tfid,varid,var_in_r,start=[gridstart],count=[gridcount])
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_get_att(tfid,varid,"missing_value",missing_value)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_get_att(tfid,varid,"scale_factor",scale_factor)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+! ncstat = nf90_get_att(tfid,varid,"scale_factor",scale_factor)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-where (var_in /= missing_value)
-  values = real(var_in) * scale_factor
+where (var_in_r /= missing_value)
+  values = var_in_r !* scale_factor
 elsewhere
   values = -9999.
 end where
@@ -425,7 +427,7 @@ do i = 1, gridcount
   topovars(i)%elev = values(i)
 end do
 
-deallocate(var_in)
+deallocate(var_in_r)
 deallocate(values)
 
 ! -----------------------------------------------------
@@ -484,6 +486,62 @@ end do
 deallocate(var_in_r)
 deallocate(values)
 
+! -----------------------------------------------------
+! INPUT: Read in gridcell area
+
+allocate(var_in_r(gridcount))
+allocate(values(gridcount))
+
+ncstat = nf90_inq_varid(tfid,"cell_area",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(tfid,varid,var_in_r,start=[gridstart],count=[gridcount])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(tfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in_r /= missing_value)
+  values = var_in_r
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  topovars(i)%cellarea = values(i)
+end do
+
+deallocate(var_in_r)
+deallocate(values)
+
+! -----------------------------------------------------
+! INPUT: Read in areafrac
+
+allocate(var_in_r(gridcount))
+allocate(values(gridcount))
+
+ncstat = nf90_inq_varid(tfid,"areafrac",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(tfid,varid,var_in_r,start=[gridstart],count=[gridcount])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(tfid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+where (var_in_r /= missing_value)
+  values = var_in_r
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  topovars(i)%areafrac = values(i)
+end do
+
+deallocate(var_in_r)
+deallocate(values)
+
 !------
 
 ncstat = nf90_close(tfid)
@@ -491,6 +549,95 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 
 end subroutine topodatainput
+
+!---------------------------------------------------------------------
+
+subroutine LAIdatainput(info)
+
+! Read in the full array all gridcells and all layers, of soil variales (sand, clay and cfvo composition)
+
+use utilitiesmod, only : getmonth
+use metvarsmod,   only : vegvars,ndyear
+
+type(infompi), target, intent(in) :: info
+
+integer :: ifid
+integer :: dimid
+integer :: varid
+
+integer(i4) :: gridstart
+integer(i4) :: gridcount
+
+integer(i2), allocatable, dimension(:,:) :: var_in
+real(sp),    allocatable, dimension(:,:) :: values
+
+real(sp)    :: scale_factor
+real(sp)    :: add_offset
+integer(i2) :: missing_value
+
+integer(i4) :: month
+integer(i4) :: sday
+integer(i4) :: eday
+
+integer :: i
+integer :: d
+
+!------
+
+gridstart = srt(1)
+gridcount = cnt(1)
+
+! -----------------------------------------------------
+! INPUT: Read in layer depth variable (zpos)
+
+ncstat = nf90_open(LAIfile,nf90_nowrite,ifid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)           !
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+
+! -----------------------------------------------------
+! INPUT: Read in sand composition
+
+allocate(var_in(gridcount,12))
+allocate(values(gridcount,12))
+
+ncstat = nf90_inq_varid(ifid,"LAI",varid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_var(ifid,varid,var_in,start=[gridstart,1],count=[gridcount,12])
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_get_att(ifid,varid,"missing_value",missing_value)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+scale_factor = 1.0
+
+where (var_in /= missing_value)
+  values = real(var_in) * scale_factor
+elsewhere
+  values = -9999.
+end where
+
+do i = 1, gridcount
+  do d = 1, 366
+
+    call getmonth(d,ndyear,month,sday,eday)
+
+    vegvars(i,d)%lai = values(i,month)
+
+  end do
+end do
+
+deallocate(var_in)
+deallocate(values)
+
+
+!------
+
+ncstat = nf90_close(ifid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+
+end subroutine LAIdatainput
 
 !---------------------------------------------------------------------
 

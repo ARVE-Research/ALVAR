@@ -33,7 +33,7 @@ contains
 subroutine diurnaltemp(grid,day)
 
 ! use statevars,   only : sv,gridded,dayl
-use metvarsmod,  only : dayvars,gridlat
+use metvarsmod,  only : dayvars,gridlat,lprint,gprint
 
 !arguments
 integer(i4), intent(in) :: grid
@@ -62,6 +62,10 @@ real(dp) :: tpm                     !daytime post noon till sundown
 real(dp) :: morn                    !sunrise - peakt
 real(dp) :: sunrise_next            !relative to solar noon (rad)
 
+integer(i4) :: dayhour
+integer(i4) :: nighthour
+integer(i4) :: dayhour_n
+
 !point pointers to global data
 tmin     => dayvars(grid,day)%tmin
 tmax     => dayvars(grid,day)%tmax
@@ -85,8 +89,8 @@ call daylength(day, lat, dayl(2))
 ! For seperating daytime and nighttime data points: (Leo Lai May 2019)
 ! Define daylength of polar night to be 1 hour
 ! Define daylength of polar day to be 23 hours
-if (dayl(1) >= daysec) dayl(1) = daysec - 3600.
-if (dayl(2) >= daysec) dayl(2) = daysec - 3600.
+if (dayl(1) >= daysec - 3600.) dayl(1) = daysec - 3600.
+if (dayl(2) >= daysec - 3600.) dayl(2) = daysec - 3600.
 
 if (dayl(1) < 3600.) dayl(1) = 3600.
 if (dayl(2) < 3600.) dayl(2) = 3600.
@@ -187,6 +191,58 @@ end if
 ! Calculate mean temperature from tday and tnight to stored into 'dayvars'
 tmean = tday * (dayl(1) / daysec) + tnight * ((daysec - dayl(1)) / daysec)
 
+! Claculate and save daylength variables to dayvars
+dayvars(grid,day)%dayl = dayl(1) / 3600.      ! second to hour
+dayvars(grid,day)%dayl_n = dayl(2) / 3600.    ! second to hour
+
+! Find number of hours with sunlight on current and next day (closest integer for indexing in sub-daily processes)
+dayhour = ceiling(dayl(1) / 3600.)
+dayhour_n = ceiling(dayl(2) / 3600.)
+
+! Find current day sunrise and sunset hour
+! Variable adapted for indexing on a 24 hourly array such that
+!     sunrise = the first hour at which sunlight is observed (inclusive) --> same for sunrise_n
+!     sunset = the first hour at which there is NO sunlight (i.e. if sunset = 18:00, meaning light is last observed in 17:00 hour interval)
+! NOTE: for indexing, day == (sunrise:sunset-1) and night == (sunset:24) + (1:sunrise_n-1)
+
+if (mod(dayhour,2) /= 0) then
+
+  dayvars(grid,day)%sunrise = 12 - (dayhour-1) / 2
+  dayvars(grid,day)%sunset = 12 + (dayhour-1) / 2 + 1
+
+else
+
+  dayvars(grid,day)%sunrise = 12 - (dayhour/2) + 1
+  dayvars(grid,day)%sunset = 12 + (dayhour/2) + 1
+
+end if
+
+!---
+
+if (mod(dayhour_n,2) /= 0) then
+
+  dayvars(grid,day)%sunrise_n = 12 - (dayhour_n-1) / 2
+
+else
+
+  dayvars(grid,day)%sunrise_n = 12 - (dayhour_n/2) + 1
+
+end if
+
+!---
+
+nighthour = (24 - dayvars(grid,day)%sunset + 1) + (dayvars(grid,day)%sunrise_n - 1)
+
+!---
+
+dayvars(grid,day)%dayhour = dayhour
+dayvars(grid,day)%nighthour = nighthour
+
+! if (lprint .and. grid==gprint) &
+!   print*, dayhour, nighthour, dayvars(grid,day)%sunset-dayvars(grid,day)%sunrise
+
+! if (dayvars(grid,day)%sunset-dayvars(grid,day)%sunrise /= dayhour) &
+!   print *, dayhour, nighthour, dayvars(grid,day)%sunrise, dayvars(grid,day)%sunrise_n
 
 end subroutine diurnaltemp
 

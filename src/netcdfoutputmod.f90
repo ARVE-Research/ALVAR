@@ -3,7 +3,7 @@ module netcdfoutputmod
 use parametersmod, only : i2,i4,sp,dp,missing_i2
 use errormod,      only : ncstat,netcdf_err
 use outputmod,     only : infompi
-use metvarsmod,    only : dayvars,soilvars,ndyear,nd,calcyrs
+use metvarsmod,    only : dayvars,soilvars,vegvars,ndyear,nd,calcyrs,ilen
 use biome1mod,     only : biomevars,biome_mean
 use weathergenmod, only : roundto
 use netcdf
@@ -138,15 +138,15 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 ! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 !
 ! !-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'tmean',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar = nint(dayvars(:,1:ndyear)%tmean / 0.1)
-
-ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
+!
+! ncstat = nf90_inq_varid(ofid,'tmean',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar = nint(dayvars(:,1:ndyear)%tmean / 0.1)
+!
+! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
 ! !-----------------------------------------------------------
 !
 ! ncstat = nf90_inq_varid(ofid,'tdew',varid)
@@ -208,14 +208,14 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 ! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 !
 ! !-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'rhum',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-outvar_r = dayvars(:,1:ndyear)%rhum
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_varid(ofid,'rhum',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%rhum
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 !
 ! !-----------------------------------------------------------
 !
@@ -247,15 +247,27 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 ! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
 ! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-!-----------------------------------------------------------
+! -----------------------------------------------------------
 
-ncstat = nf90_inq_varid(ofid,'ForFireMk5',varid)
+ncstat = nf90_inq_varid(ofid,'gpp',varid)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-outvar_r = dayvars(:,1:ndyear)%ForFireMk5
+do i = 1, ndyear
+  outvar_r(:,i) = vegvars(:,i)%C_leaf
+end do
 
 ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+
+!-----------------------------------------------------------
+!
+! ncstat = nf90_inq_varid(ofid,'ForFireMk5',varid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! outvar_r = dayvars(:,1:ndyear)%ForFireMk5
+!
+! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 !-----------------------------------------------------------
 !-----------------------------------------------------------

@@ -169,6 +169,8 @@ Ratm30 => dayvars(grid,day)%Ratm30
 
 !----------
 
+if (isnan(elev(grid)) .or. elev(grid) > 6000.) elev(grid) = 0.
+
 ! Elevation is used to get the atmospheric pressure (Diehl 1925 (from Lloyd and Farquhar 1994))
 ! Code copied from ARVE-DGVM by Leo Lai (Jul 2021)
 Ratm = (1.0 - elev(grid) / 44308.) ** 5.2568         ! Multiply fraction by standard atm for pressure level in Pa
@@ -281,7 +283,7 @@ end do
 ! topovars(grid)%sloperad = sloperad
 
 dayvars(grid,dyr)%dsol     = delta
-dayvars(grid,dyr)%dayl     = dayl
+! dayvars(grid,dyr)%dayl     = dayl
 dayvars(grid,dyr)%srad     = sw_rad
 dayvars(grid,dyr)%srad_dir = direct
 dayvars(grid,dyr)%srad_dif = diffuse

@@ -31,7 +31,8 @@ subroutine hourlyprec(year,grid,day)
 
 ! Subroutine written by Leo O Lai (Jul 2021)
 
-use metvarsmod,  only : dayvars
+use utilitiesmod, only : getmonth
+use metvarsmod,   only : dayvars,ndyear
 
 !arguments
 integer(i4), intent(in) :: year
@@ -76,7 +77,7 @@ integer :: i
 !------
 ! Get daily met variables of the current month, calculate start and end array index of the month
 
-call getmonth(day, month, sday, eday)
+call getmonth(day, ndyear, month, sday, eday)
 
 allocate(prec(eday-sday+1))
 allocate(tmean(eday-sday+1))
@@ -713,195 +714,6 @@ do i = 1, size(b)
 end do
 
 end subroutine sort_descend
-
-!-----------------------------------------------------------------------
-
-subroutine getmonth(day,month,startday,endday)
-
-! Get the month (1-12) from input Julian day and get the start and end Julian
-! date of the month
-
-use metvarsmod, only : dayvars
-
-implicit none
-
-integer(i4), intent(in)  :: day
-integer(i4), intent(out) :: month
-integer(i4), intent(out) :: startday
-integer(i4), intent(out) :: endday
-
-logical :: leap
-
-!------
-
-! Check if current year is leap year or not
-if (size(dayvars(1,:)%prec) - 31 == 365) leap = .FALSE.
-if (size(dayvars(1,:)%prec) - 31 == 366) leap = .TRUE.
-
-! Assign month based on input Julian date
-if (.not.leap) then
-
-  !------
-
-  if (day <= 31) then
-
-    month    = 1
-    startday = 1
-    endday   = 31
-
-  else if (day >= 32 .AND. day <= 59) then
-
-    month    = 2
-    startday = 32
-    endday   = 59
-
-  else if (day >= 60 .AND. day <= 90) then
-
-    month    = 3
-    startday = 60
-    endday   = 90
-
-  else if (day >= 91 .AND. day <= 120) then
-
-    month    = 4
-    startday = 91
-    endday   = 120
-
-  else if (day >= 121 .AND. day <= 151) then
-
-    month    = 5
-    startday = 121
-    endday   = 151
-
-  else if (day >= 152 .AND. day <= 181) then
-
-    month    = 6
-    startday = 152
-    endday   = 181
-
-  else if (day >= 182 .AND. day <= 212) then
-
-    month    = 7
-    startday = 182
-    endday   = 212
-
-  else if (day >= 213 .AND. day <= 243) then
-
-    month    = 8
-    startday = 213
-    endday   = 243
-
-  else if (day >= 244 .AND. day <= 273) then
-
-    month    = 9
-    startday = 244
-    endday   = 273
-
-  else if (day >= 274 .AND. day <= 304) then
-
-    month    = 10
-    startday = 274
-    endday   = 304
-
-  else if (day >= 305 .AND. day <= 334) then
-
-    month    = 11
-    startday = 305
-    endday   = 334
-
-  else if (day >= 335) then
-
-    month    = 12
-    startday = 335
-    endday   = 365
-
-  end if
-
-  !------
-
-else if (leap) then
-
-  !------
-
-  if (day <= 31) then
-
-    month    = 1
-    startday = 1
-    endday   = 31
-
-  else if (day >= 32 .AND. day <= 60) then
-
-    month    = 2
-    startday = 32
-    endday   = 60
-
-  else if (day >= 61 .AND. day <= 91) then
-
-    month    = 3
-    startday = 61
-    endday   = 91
-
-  else if (day >= 92 .AND. day <= 121) then
-
-    month    = 4
-    startday = 92
-    endday   = 121
-
-  else if (day >= 122 .AND. day <= 152) then
-
-    month    = 5
-    startday = 122
-    endday   = 152
-
-  else if (day >= 153 .AND. day <= 182) then
-
-    month    = 6
-    startday = 153
-    endday   = 182
-
-  else if (day >= 183 .AND. day <= 213) then
-
-    month    = 7
-    startday = 183
-    endday   = 213
-
-  else if (day >= 214 .AND. day <= 244) then
-
-    month    = 8
-    startday = 214
-    endday   = 244
-
-  else if (day >= 245 .AND. day <= 274) then
-
-    month    = 9
-    startday = 245
-    endday   = 274
-
-  else if (day >= 275 .AND. day <= 305) then
-
-    month    = 10
-    startday = 275
-    endday   = 305
-
-  else if (day >= 306 .AND. day <= 335) then
-
-    month    = 11
-    startday = 306
-    endday   = 335
-
-  else if (day >= 336) then
-
-    month    = 12
-    startday = 336
-    endday   = 366
-
-  end if
-
-  !------
-
-end if
-
-end subroutine getmonth
 
 !-----------------------------------------------------------------------
 

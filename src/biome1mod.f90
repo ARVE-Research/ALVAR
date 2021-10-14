@@ -127,6 +127,8 @@ subroutine calcbiome_year(year,grid)
 ! Subroutine to calculate biome type based on met variables (code copied from BIOME1) - Leo O Lai (June 2021)
 ! Input variables modified for the ALVAR model
 
+use metvarsmod, only : vegvars
+
 implicit none
 
 ! Arguments
@@ -343,6 +345,7 @@ end do
 if (dayvars(grid,1)%daet == -9999.) biome = missing_i2
 
 biomevars(grid,year)%biome = biome(1)
+vegvars(grid,:)%biome = biome(1)
 
 
 end subroutine calcbiome_year

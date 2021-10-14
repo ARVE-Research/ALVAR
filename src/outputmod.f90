@@ -614,6 +614,24 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
+!GPP
+
+ncstat = nf90_def_var(ofid,'gpp',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','gross primary productivity')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','g C m-2 month-1')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
 !forest fire danger meter Mk5
 
 ncstat = nf90_def_var(ofid,'ForFireMk5',nf90_double,dimids(3:4),varid)
