@@ -253,7 +253,7 @@ ncstat = nf90_inq_varid(ofid,'gpp',varid)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 do i = 1, ndyear
-  outvar_r(:,i) = vegvars(:,i)%sm_ind
+  outvar_r(:,i) = vegvars(:,i)%hm_ind
 end do
 
 ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])

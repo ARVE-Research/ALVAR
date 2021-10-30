@@ -106,6 +106,8 @@ real(sp), pointer :: dgp                  ! Optimal daily canopy conductance (mm
 real(sp), pointer :: dgc                  ! Actual daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
 real(sp), pointer :: dwscal
 
+real(sp), pointer :: fpc_grid
+
 real(sp), pointer :: elev                 ! Elevation (m)
 real(sp), pointer :: cellarea             ! Area of gridcell (m2)
 real(sp), pointer :: areafrac             ! Ground area fraction in gridcell (fraction)
@@ -123,6 +125,7 @@ real(sp) :: Ko                    ! Michaelis constant for O2 in eq.16 (Wang et 
 real(sp) :: Po                    ! O2 partial pressure in eq.17 (Pa) (Wang et al. 2017)
 real(sp) :: visco                 ! Viscosity of water relative to 25C / 298.15K (fraction)
 real(sp) :: par                   ! Photosynthetically active radiation (W m-2)
+real(sp) :: fpar                  ! Fraciton of PAR intercepted by foliage (fraction)
 real(sp) :: apar                  ! Absorbed photosynthetically active radiation (W m-2)
 real(sp) :: ppfd                  ! Photosynthetic photo flux density (mol m-2 s-1)
 real(sp) :: appfd                 ! Absorbed (by leaf) photosynthetic photo flux density (mol m-2 s-1)
@@ -202,6 +205,7 @@ rd => vegvars(grid,day)%rd
 dgp     => vegvars(grid,day)%dgp
 dgc     => vegvars(grid,day)%dgc
 dwscal => vegvars(grid,day)%dwscal
+fpc_grid => vegvars(grid,1)%fpc_grid
 
 dpet => dayvars(grid,day)%dpet
 
@@ -242,17 +246,24 @@ gammastar = 4.332 * Ratm * exp((37830. / 8.314) * (1./298.15  - 1./tmean_K))
 visco = exp(A + B / (C + tmean_K)) /  exp(A + B / (C + 298.15))
 
 !-------------------------
-! Calculate photosynthetically active radiation (PAR) (W m-2) and photosynthetic photon flux density (PPFD) (mol m-2 s-1)
+! Calculate photosynthetic photon flux density (PPFD) (mol m-2 s-1) for method in Wang et al. (2017)
 ! NOTE: Generalized conversion from solar irridiance used here (from Meek et al. 1984, and verified by other references; see above)
-! Calculate APAR and PPFD absorbed by leaf based on LAI input data >> Beer's law of extinction (Eq. 1, Haxeltine & Prentice, 1996)
-
-par = sr2par * (srad_dir * 1.e3 / (dayl*3600.))
-
-apar = par - (par * exp(-0.5 * lai))
-
+! Calculate PPFD absorbed by leaf based on LAI input data >> Beer's law of extinction (Eq. 1, Haxeltine & Prentice, 1996)
 ppfd = 1.e-6 * sr2ppfd * (srad_dir * 1.e3 / (dayl*3600.))      ! from micromol to mol
 
 appfd = ppfd - (ppfd * exp(-0.5 * lai))
+
+!-------------------------
+! Calculate photosynthetically active radiation (PAR) (W m-2) for LPJ method in Sitch et al. (2003)
+! Assume fPAR to be equal to fpc_grid (i.e. fraction of ground covered by foliage, thus absorbing PAR) (Leo Lai Oct 2021)
+! alphaa = constant for fraction of PAR absorbed at ecosystem level
+par = sr2par * (srad_dir * 1.e3 / (dayl*3600.))
+
+fpar = fpc_grid
+
+apar = par * fpar * alphaa
+
+apar = apar * daysec            ! from W m-2 to J m-2 d-1
 
 
 !-------------------------
@@ -297,7 +308,7 @@ inhibx2 = 25.0
 inhibx3 = 30.0
 inhibx4 = 55.0
 
-rootprop = 1.0          ! Root proportion
+rootprop = 0.9          ! Root proportion
 gminp = 0.3             ! Minimum canopy conductance (mm s-1)
 
 !-------------------------
@@ -338,7 +349,7 @@ s = (24. / dayl) * b0                                                   ! Eq. 13
 sigma = sqrt(max(0., 1. - (c2 - s)/(c2 - theta * s)))                   ! Eq. 12 (Haxeltine & Prentice, 1996)
 
 vm0 = (1. / b0) * (c1 / c2) * ((2. * theta - 1.) * s - &                ! Eq. 11 (Haxeltine & Prentice, 1996)
-     (2. * theta * s - c2) * sigma) * (apar * daysec) * cmass * cq
+     (2. * theta * s - c2) * sigma) * apar * cmass * cq
 
 
 ! Optimal daily leaf respiration, Rd, gC m-2 d-1                                ! Eq. 10 (Haxeltine & Prentice, 1996)
@@ -457,11 +468,11 @@ if (gpd > 1.e-5) then     ! Significant canopy conductance
   sigma = sqrt(max(0., 1. - (c2 - s)/(c2 - theta * s)))                   ! Eq. 12 (Haxeltine & Prentice, 1996)
 
   vm1 = (1. / b0) * (c1 / c2) * ((2. * theta - 1.) * s - &                 ! Eq. 11 (Haxeltine & Prentice, 1996)
-        (2. * theta * s - c2) * sigma) * (apar * daysec) * cmass * cq
+        (2. * theta * s - c2) * sigma) * apar * cmass * cq
 
 
   ! Calculation of APAR-limited photosynthesis rate Je, molC m-2 -h;              ! Eq. 3 (Haxeltine & Prentice, 1996)
-  je = c1 * (apar  * daysec) * cmass * cq / dayl
+  je = c1 * apar * cmass * cq / dayl
 
   ! Calculation of rubisco-activity-limited photosynthesis rate Jc, molC m-2 -h   ! Eq. 5 (Haxeltine & Prentice, 1996)
   jc = c2 * vm1 / 24.
@@ -492,23 +503,9 @@ end if  !canopy conductance
 
 !------
 
-if (supply < demand .and. dayvars(grid,day)%dpet > 0. .and. gpp0 > 0.) then
+if (dayvars(grid,day)%dpet > 0. .and. gpp1 > 0.) then
 
-  if (year >= 30) then
-
-    gpp1 = gpp1
-    gpp_tot = gpp1 * cellarea * areafrac
-
-  else
-
-    gpp1 = gpp0
-    gpp_tot = gpp0 * cellarea * areafrac
-
-  end if
-
-else
-
-  if (year >= 30) then
+  if (year >= 1) then
 
     gpp1 = gpp1
     gpp_tot = gpp1 * cellarea * areafrac
@@ -536,155 +533,155 @@ end if
 end subroutine gpp
 
 !---------------------------------------------------------------------
-
-subroutine leafcarbon(grid,day)
-
-use statevarsmod, only : vegvars
-
-implicit none
-
-integer(i4), intent(in) :: grid
-integer(i4), intent(in) :: day
-
-real(sp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
-                                              ,0.012    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
-                                              ,0.030    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
-                                              ,0.012    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
-                                              ,0.030    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
-                                              ,0.030    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
-                                              ,0.010    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
-                                              ,0.008    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
-                                              ,0.008    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
-                                              ,0.024    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
-                                              ,0.050    &       ! 11 = Xerophytic / C4 grass
-                                              ,0.050    &       ! 12 = Warm grass / C4 grass
-                                              ,0.050    &       ! 13 = Cool grass / C3 nonarctic grass
-                                              ,0.000    &       ! 14 = Tundra
-                                              ,0.000    &       ! 15 = Hot desert
-                                              ,0.000    &       ! 16 = Cold desert
-                                              ,0.000    ]       ! 17 = Barren
-
-real(sp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
-                                              ,0.0015    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
-                                              ,0.0040    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
-                                              ,0.0015    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
-                                              ,0.0040    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
-                                              ,0.0040    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
-                                              ,0.0013    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
-                                              ,0.0010    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
-                                              ,0.0010    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
-                                              ,0.0030    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
-                                              ,0.0000    &       ! 11 = Xerophytic / C4 grass
-                                              ,0.0000    &       ! 12 = Warm grass / C4 grass
-                                              ,0.0000    &       ! 13 = Cool grass / C3 nonarctic grass
-                                              ,0.0000    &       ! 14 = Tundra
-                                              ,0.0000    &       ! 15 = Hot desert
-                                              ,0.0000    &       ! 16 = Cold desert
-                                              ,0.0000    ]       ! 17 = Barren
-
-integer(i4), pointer :: biome
-real(sp), pointer :: C_leaf
-real(sp), pointer :: sla
-real(sp), pointer :: lai
-
-!-------------------------
-
-C_leaf => vegvars(grid,day)%C_leaf
-sla => vegvars(grid,day)%sla
-lai => vegvars(grid,day)%lai
-biome => vegvars(grid,day)%biome
-
-!-------------------------
-
-if (biome /= missing_i2 .and. biome < 11 .and. lai /= -9999.) then
-
-  C_leaf = log(m(biome) * lai + sla0(biome) - log(sla0(biome))) / m(biome)
-
-end if
-
-
-
-end subroutine leafcarbon
-
-!---------------------------------------------------------------------
-
-subroutine lai(grid,day)
-
-use statevarsmod, only : vegvars,gprint,lprint
-
-implicit none
-
-integer(i4), intent(in) :: grid
-integer(i4), intent(in) :: day
-
-real(sp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
-                                              ,0.012    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
-                                              ,0.030    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
-                                              ,0.012    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
-                                              ,0.030    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
-                                              ,0.030    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
-                                              ,0.010    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
-                                              ,0.008    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
-                                              ,0.008    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
-                                              ,0.024    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
-                                              ,0.050    &       ! 11 = Xerophytic / C4 grass
-                                              ,0.050    &       ! 12 = Warm grass / C4 grass
-                                              ,0.050    &       ! 13 = Cool grass / C3 nonarctic grass
-                                              ,0.000    &       ! 14 = Tundra
-                                              ,0.000    &       ! 15 = Hot desert
-                                              ,0.000    &       ! 16 = Cold desert
-                                              ,0.000    ]       ! 17 = Barren
-
-real(sp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
-                                              ,0.0015    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
-                                              ,0.0040    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
-                                              ,0.0015    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
-                                              ,0.0040    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
-                                              ,0.0040    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
-                                              ,0.0013    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
-                                              ,0.0010    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
-                                              ,0.0010    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
-                                              ,0.0030    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
-                                              ,0.0000    &       ! 11 = Xerophytic / C4 grass
-                                              ,0.0000    &       ! 12 = Warm grass / C4 grass
-                                              ,0.0000    &       ! 13 = Cool grass / C3 nonarctic grass
-                                              ,0.0000    &       ! 14 = Tundra
-                                              ,0.0000    &       ! 15 = Hot desert
-                                              ,0.0000    &       ! 16 = Cold desert
-                                              ,0.0000    ]       ! 17 = Barren
-
-integer(i4), pointer :: biome
-real(sp), pointer :: C_leaf
-real(sp), pointer :: sla
-real(sp), pointer :: lai0
-
-real(sp) :: lai_sun
-real(sp) :: lai_sha
-
-real(sp), parameter :: kb = 0.5       ! Extinction factors, should be function of zenith angle and leaf angle, but constant FOR NOW (Dai et al., 2004)
-
-
-!-------------------------
-
-C_leaf => vegvars(grid,day)%C_leaf
-sla => vegvars(grid,day)%sla
-lai0 => vegvars(grid,day)%lai
-biome => vegvars(grid,day)%biome
-
-!-------------------------
-
-if (biome /= missing_i2 .and. biome < 11 .and. lai0 /= -9999.) then
-
-  lai0 = sla0(biome) * exp(m(biome) * C_leaf - 1.0) / m(biome)
-
-end if
-
-lai_sun = (1 - exp(-kb * lai0)) / kb
-lai_sha = lai0 - lai_sun
-
+!
+! subroutine leafcarbon(grid,day)
+!
+! use statevarsmod, only : vegvars
+!
+! implicit none
+!
+! integer(i4), intent(in) :: grid
+! integer(i4), intent(in) :: day
+!
+! real(sp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+!                                               ,0.012    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
+!                                               ,0.030    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
+!                                               ,0.012    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
+!                                               ,0.030    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
+!                                               ,0.030    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
+!                                               ,0.010    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
+!                                               ,0.008    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
+!                                               ,0.008    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
+!                                               ,0.024    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
+!                                               ,0.050    &       ! 11 = Xerophytic / C4 grass
+!                                               ,0.050    &       ! 12 = Warm grass / C4 grass
+!                                               ,0.050    &       ! 13 = Cool grass / C3 nonarctic grass
+!                                               ,0.000    &       ! 14 = Tundra
+!                                               ,0.000    &       ! 15 = Hot desert
+!                                               ,0.000    &       ! 16 = Cold desert
+!                                               ,0.000    ]       ! 17 = Barren
+!
+! real(sp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+!                                               ,0.0015    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
+!                                               ,0.0040    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
+!                                               ,0.0015    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
+!                                               ,0.0040    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
+!                                               ,0.0040    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
+!                                               ,0.0013    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
+!                                               ,0.0010    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
+!                                               ,0.0010    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
+!                                               ,0.0030    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
+!                                               ,0.0000    &       ! 11 = Xerophytic / C4 grass
+!                                               ,0.0000    &       ! 12 = Warm grass / C4 grass
+!                                               ,0.0000    &       ! 13 = Cool grass / C3 nonarctic grass
+!                                               ,0.0000    &       ! 14 = Tundra
+!                                               ,0.0000    &       ! 15 = Hot desert
+!                                               ,0.0000    &       ! 16 = Cold desert
+!                                               ,0.0000    ]       ! 17 = Barren
+!
+! integer(i4), pointer :: biome
+! real(sp), pointer :: C_leaf
+! real(sp), pointer :: sla
+! real(sp), pointer :: lai
+!
+! !-------------------------
+!
+! C_leaf => vegvars(grid,day)%C_leaf
+! sla => vegvars(grid,day)%sla
+! lai => vegvars(grid,day)%lai
+! biome => vegvars(grid,day)%biome
+!
+! !-------------------------
+!
+! if (biome /= missing_i2 .and. biome < 11 .and. lai /= -9999.) then
+!
+!   C_leaf = log(m(biome) * lai + sla0(biome) - log(sla0(biome))) / m(biome)
+!
+! end if
+!
+!
+!
+! end subroutine leafcarbon
+!
+! !---------------------------------------------------------------------
+!
+! subroutine lai(grid,day)
+!
+! use statevarsmod, only : vegvars,gprint,lprint
+!
+! implicit none
+!
+! integer(i4), intent(in) :: grid
+! integer(i4), intent(in) :: day
+!
+! real(sp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+!                                               ,0.012    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
+!                                               ,0.030    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
+!                                               ,0.012    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
+!                                               ,0.030    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
+!                                               ,0.030    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
+!                                               ,0.010    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
+!                                               ,0.008    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
+!                                               ,0.008    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
+!                                               ,0.024    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
+!                                               ,0.050    &       ! 11 = Xerophytic / C4 grass
+!                                               ,0.050    &       ! 12 = Warm grass / C4 grass
+!                                               ,0.050    &       ! 13 = Cool grass / C3 nonarctic grass
+!                                               ,0.000    &       ! 14 = Tundra
+!                                               ,0.000    &       ! 15 = Hot desert
+!                                               ,0.000    &       ! 16 = Cold desert
+!                                               ,0.000    ]       ! 17 = Barren
+!
+! real(sp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+!                                               ,0.0015    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
+!                                               ,0.0040    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
+!                                               ,0.0015    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
+!                                               ,0.0040    &       ! 5 = Temperate deciduous / Broadleaf deciduous tree (temperate)
+!                                               ,0.0040    &       ! 6 = Cool mixed / Broadleaf deciduous tree (temperate)
+!                                               ,0.0013    &       ! 7 = Cool conifer / Needleleaf evergreen (temperate)
+!                                               ,0.0010    &       ! 8 = Cold evergreen / Needleleaf evergreen tree (boreal)
+!                                               ,0.0010    &       ! 9 = Cold mixed / Needleleaf evergreen tree (boreal)
+!                                               ,0.0030    &       ! 10 = Cold deciduous / Needleleaf deciduous tree
+!                                               ,0.0000    &       ! 11 = Xerophytic / C4 grass
+!                                               ,0.0000    &       ! 12 = Warm grass / C4 grass
+!                                               ,0.0000    &       ! 13 = Cool grass / C3 nonarctic grass
+!                                               ,0.0000    &       ! 14 = Tundra
+!                                               ,0.0000    &       ! 15 = Hot desert
+!                                               ,0.0000    &       ! 16 = Cold desert
+!                                               ,0.0000    ]       ! 17 = Barren
+!
+! integer(i4), pointer :: biome
+! real(sp), pointer :: C_leaf
+! real(sp), pointer :: sla
+! real(sp), pointer :: lai0
+!
+! real(sp) :: lai_sun
+! real(sp) :: lai_sha
+!
+! real(sp), parameter :: kb = 0.5       ! Extinction factors, should be function of zenith angle and leaf angle, but constant FOR NOW (Dai et al., 2004)
+!
+!
+! !-------------------------
+!
+! C_leaf => vegvars(grid,day)%C_leaf
+! sla => vegvars(grid,day)%sla
+! lai0 => vegvars(grid,day)%lai
+! biome => vegvars(grid,day)%biome
+!
+! !-------------------------
+!
+! if (biome /= missing_i2 .and. biome < 11 .and. lai0 /= -9999.) then
+!
+!   lai0 = sla0(biome) * exp(m(biome) * C_leaf - 1.0) / m(biome)
+!
+! end if
+!
+! lai_sun = (1 - exp(-kb * lai0)) / kb
+! lai_sha = lai0 - lai_sun
+!
 ! if(grid == gprint .and. lprint) print *, day, lai0, lai_sun,lai_sha, C_leaf
-
-end subroutine lai
+!
+! end subroutine lai
 
 !---------------------------------------------------------------------
 

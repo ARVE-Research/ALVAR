@@ -23,8 +23,10 @@ alvar_SOURCES =        \
 	gppmod.f90           \
 	nppmod.f90           \
 	establishmentmod.f90 \
+	lightmod.f90         \
 	turnovermod.f90      \
 	allocationmod.f90    \
+	mortalitymod.f90     \
 	fireindexmod.f90     \
   getdatamod.f90       \
   outputmod.f90        \

@@ -159,46 +159,44 @@ type(soildata), target, allocatable, dimension(:) :: soilvars   ! Dimension allo
 type veg_vars
 
   ! Derived datatype for vegetation variables
-  real(sp) :: gammastar     ! Photorespiratory compensation point (Pa)
-  real(sp) :: gpp0          ! Gross primary productivity under non-water stressed condition (g C m-2 d-1)
-  real(sp) :: gpp           ! Gross primary productivity under actual condition (g C m-2 d-1)
-  real(sp) :: gpp_tot       ! Total daily gross primary productivity (g C d-1)
-  real(sp) :: npp0
-  real(sp) :: npp_tot
-  real(sp) :: aresp
-  real(sp) :: rd            ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
-  real(sp) :: chi           ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
-  real(sp) :: chi0          ! Optimal leaf internal / external CO2 partial pressure ratio (fraction)
+  real(sp) :: gammastar         ! Photorespiratory compensation point (Pa)
+  real(sp) :: gpp0              ! Gross primary productivity under non-water stressed condition (g C m-2 d-1) --> (Wang et al., 2017)
+  real(sp) :: gpp               ! Gross primary productivity under actual condition (g C m-2 d-1) --> (Sitch et al., 2003; LPJ)
+  real(sp) :: gpp_tot           ! Total daily gross primary productivity (g C d-1)
+  real(sp) :: npp               ! Net primary productivity (g C m-2 d-1)
+  real(sp) :: npp_tot           ! Total net primary productivity (g C d-1)
+  real(sp) :: aresp             ! Autotrophic maintenence respiration (g C m-2 d-1)
+  real(sp) :: rd                ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
+  real(sp) :: chi               ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
+  real(sp) :: chi0              ! Optimal leaf internal / external CO2 partial pressure ratio (fraction)
+  real(sp) :: dgp               ! Optimal daily canopy conductance (mm m-2 s-1)
+  real(sp) :: dgc               ! Actual daily canopy conductance (mm m-2 s-1
+  real(sp) :: lai               ! LAI from data input (m2 m-2)
+  real(sp) :: sla               ! Specific leaf area (m2 gC-1)
 
-  real(sp) :: dgp           ! Optimal daily canopy conductance (mm m-2 s-1)
-  real(sp) :: dgc           ! Actual daily canopy conductance (mm m-2 s-1
-  real(sp) :: lai           ! LAI from data input (m2 m-2)
-  real(sp) :: sla           ! Specific leaf area (m2 gC-1)
-  real(sp) :: C_leaf        ! Leaf carbon (gC m-2)
-
-  integer(i4) :: biome      ! Biome classification from biome1
+  integer(i4) :: biome          ! Biome classification from BIOME1 subroutine
 
   ! LPJ adapted vegetation variables
-  logical :: present
-  logical :: estab
-  logical :: survive
-  real(sp) :: dwscal
-  real(sp) :: fpc_grid
-  real(sp) :: fpc_ind
-  real(sp) :: fpc_inc
-  real(sp) :: nind
-  real(sp) :: stemdiam
-  real(sp) :: height
-  real(sp) :: crownarea
-  real(sp) :: lai_ind
-  real(sp) :: hm_ind
-  real(sp) :: lm_ind
-  real(sp) :: sm_ind
-  real(sp) :: rm_ind
-  real(sp) :: litter_ag_fast
-  real(sp) :: litter_ag_slow
-  real(sp) :: litter_bg
-  real(sp) :: turnover_ind
+  logical  :: present           ! PFT present
+  logical  :: estab             ! PFT establishment
+  logical  :: survive           ! PFT survival
+  real(sp) :: dwscal            ! Daily water stress factor (supply/demand ratio)
+  real(sp) :: fpc_grid          ! Foilage projective cover over grid (fraction)
+  real(sp) :: fpc_ind           ! Foliage projective cover of individual (fraction)
+  real(sp) :: fpc_inc           ! Foliage projective cover increment (fraction)
+  real(sp) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
+  real(sp) :: rm_ind            ! Root carbon mass of individual (gC m-2)
+  real(sp) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
+  real(sp) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
+  real(sp) :: nind              ! PFT population
+  real(sp) :: stemdiam          ! Tree stem diameter (m)
+  real(sp) :: height            ! Tree height (m)
+  real(sp) :: crownarea         ! Tree crownarea (m2)
+  real(sp) :: lai_ind           ! Leaf area index of individual (m2 m-2)
+  real(sp) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
+  real(sp) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
+  real(sp) :: litter_bg         ! Below ground litter pool (gC m-2)
+  real(sp) :: turnover_ind      ! Total turnover of individual (gC m-2)
 
 end type veg_vars
 

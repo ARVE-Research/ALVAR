@@ -21,6 +21,7 @@ use biome1mod,       only : initbiomevars,savebiomevars,calcbiome_year,calcbiome
 use gppmod,          only : gpp
 use nppmod,          only : npp
 use establishmentmod,only : sapling,bioclim,establishment
+use lightmod,        only : light
 use turnovermod,     only : turnover
 use allocationmod,   only : allocation
 use fireindexmod,    only : fireindex
@@ -224,8 +225,7 @@ yearloop : do yr = 1, calcyrs
 
     end do diurnalloop
 
-    ! if (yr < 5 .and. d == ndyear) print *, rank,yr, d, sum(vegvars%gpp_tot)
-    ! if (yr >= 5 .and. d == ndyear) print *, rank,yr, d, sum(vegvars%npp_tot)
+    if (d == ndyear) print *, rank,yr, d, sum(vegvars%gpp_tot), sum(vegvars%aresp), sum(vegvars%npp_tot)
 
   end do dayloop2
 
@@ -238,9 +238,13 @@ yearloop : do yr = 1, calcyrs
 
     call establishment(yr,grid,1)
 
+    call light(yr,grid,1)
+
     call turnover(yr,grid,1)
 
     call allocation(yr,grid,1)
+
+    call light(yr,grid,1)
 
   end do gridloop_vegetation
 

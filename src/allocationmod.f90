@@ -116,21 +116,21 @@ hm_ind => vegvars(grid,day)%hm_ind
 lm_ind => vegvars(grid,day)%lm_ind
 sm_ind => vegvars(grid,day)%sm_ind
 rm_ind => vegvars(grid,day)%rm_ind
-npp => vegvars(grid,day)%npp0
+npp => vegvars(grid,day)%npp
 gpp => vegvars(grid,day)%gpp0
 
 !-------------------------
 
 if (present) then
 
-  if (npp == -9999.) vegvars(grid,:)%npp0 = 0.0
+  if (npp == -9999.) vegvars(grid,:)%npp = 0.0
 
   lm = lm_ind
   sm = sm_ind
   hm = hm_ind
   rm = rm_ind
 
-  bm_inc_ind = sum(vegvars(grid,:)%npp0) / nind
+  bm_inc_ind = sum(vegvars(grid,:)%npp) / nind
 
   bm_inc_ind = 0.9 * bm_inc_ind         ! 10% reproduction cost inserted here for now (Leo Lai Oct 2021)
 
@@ -157,7 +157,7 @@ if (present) then
 
   if (rminc_ind_min > 0. .and. lminc_ind_min > 0. .and. rminc_ind_min + lminc_ind_min <= bm_inc_ind) then
 
-    if (lprint .and. grid==gprint) print *, 'Normal allocation'
+    if (lprint .and. grid==gprint) write(0,*) 'Normal allocation'
 
     !Normal allocation (positive increment to all living C compartments)
 
@@ -271,7 +271,7 @@ if (present) then
 
   else
 
-    if (lprint .and. grid==gprint) print *, 'Abnormal allocation'
+    if (lprint .and. grid==gprint) write(0,*) 'Abnormal allocation'
 
     !Abnormal allocation: reduction in some C compartment(s) to satisfy allometry
 
@@ -333,16 +333,6 @@ if (present) then
 
   end if  !normal/abnormal allocation
 
-  !################################
-  ! Testing site -> simple assumption of allocation ratio (arbitarily derived based on Sampling mass- Leo)
-
-  ! lminc_ind = 0.25 * bm_inc_ind
-  ! rminc_ind = lminc_ind
-  ! sminc_ind = bm_inc_ind - lminc_ind - rminc_ind
-
-  !################################
-
-
   !Increment C compartments
 
   lm_ind = lm + lminc_ind
@@ -381,10 +371,13 @@ end if
 
 
 
-if (lprint .and. grid==gprint) print *, lminc_ind, rminc_ind, sminc_ind, bm_inc_ind, &
-                                        lm_ind, rm_ind, sm_ind, hm_ind, nind, &
-                                        height, stemdiam, crownarea, lai_ind, fpc_grid
-
+! if (lprint .and. grid==gprint) print *, lminc_ind, rminc_ind, sminc_ind, bm_inc_ind, &
+!                                         lm_ind, rm_ind, sm_ind, hm_ind, nind, &
+!                                         height, stemdiam, crownarea, lai_ind, fpc_grid
+!
+! if (lprint .and. grid==gprint) print *, sum(vegvars(grid,:)%gpp), &
+!                                         sum(vegvars(grid,:)%aresp), &
+!                                         sum(vegvars(grid,:)%npp)
 
 
 

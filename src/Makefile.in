@@ -113,8 +113,9 @@ am_alvar_OBJECTS = parametersmod.$(OBJEXT) errormod.$(OBJEXT) \
 	weathergenmod.$(OBJEXT) hourlyprecmod.$(OBJEXT) \
 	aetalphamod.$(OBJEXT) biome1mod.$(OBJEXT) \
 	hydrologymod.$(OBJEXT) gppmod.$(OBJEXT) nppmod.$(OBJEXT) \
-	establishmentmod.$(OBJEXT) turnovermod.$(OBJEXT) \
-	allocationmod.$(OBJEXT) fireindexmod.$(OBJEXT) \
+	establishmentmod.$(OBJEXT) lightmod.$(OBJEXT) \
+	turnovermod.$(OBJEXT) allocationmod.$(OBJEXT) \
+	mortalitymod.$(OBJEXT) fireindexmod.$(OBJEXT) \
 	getdatamod.$(OBJEXT) outputmod.$(OBJEXT) \
 	netcdfinputmod.$(OBJEXT) netcdfoutputmod.$(OBJEXT) \
 	gwgenmod.$(OBJEXT) gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) \
@@ -333,8 +334,10 @@ alvar_SOURCES = \
 	gppmod.f90           \
 	nppmod.f90           \
 	establishmentmod.f90 \
+	lightmod.f90         \
 	turnovermod.f90      \
 	allocationmod.f90    \
+	mortalitymod.f90     \
 	fireindexmod.f90     \
   getdatamod.f90       \
   outputmod.f90        \
