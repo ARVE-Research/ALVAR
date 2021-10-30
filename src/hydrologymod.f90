@@ -48,7 +48,7 @@ subroutine soilwater(rank,year,grid,day,i)
 ! Adapted from ARVE-DGVM for ALVAR model by Leo O Lai (Aug, 2021)
 
 use utilitiesmod, only : tridiag
-use metvarsmod,   only : dayvars,soilvars,cnt,lprint,gprint
+use statevarsmod,   only : dayvars,soilvars,cnt,lprint,gprint
 use soilstatemod, only : nl,dz,dzmm,zpos,zposmm,zipos,ziposmm
 
 implicit none
@@ -230,6 +230,11 @@ end if
 ! Time-step dt = 3600 for now as subroutine written for constant 1 hour time-step
 dt = 3600.
 
+! TESTING - only one iteration per day night
+dt = hr * 3600.
+hr = 1
+prec_tot = sum(prec_tot)
+
 !-------------------------
 ! Run water model in hourly time-step based on length of dayhour / nighthour
 hourloop : do h = 1, hr
@@ -273,7 +278,7 @@ hourloop : do h = 1, hr
 
   ! Hourly disaggregated precipitation
   qliq = prec_tot(h)   ! mm
-  qliq0 = qliq      ! mm - include this variable for now for code consistency in ARVE-DGVM
+  qliq0 = qliq         ! mm - include this variable for now for code consistency in ARVE-DGVM
 
   ! Substitute surface evporation with actual evapotranspirtaiton for me as net surface water change
   qseva = aet_tot(h)  ! mm
@@ -531,7 +536,9 @@ hourloop : do h = 1, hr
 end do hourloop
 
 
-! if (grid == 500 .and. rank == 40 .and. hprec > -1.) print *, year, day, hour, hprec, haet, qover, qinfl, Tliq/Tsat, dTliq_b
+! if ((grid == 500 .and. rank == 40) .and. prec_tot > -1.) then
+!   print *, year, day, hprec, haet, qover, qinfl, Tliq/Tsat, dTliq_b
+! end if
 
 ! if (lprint .and. grid==gprint) print *, year, day,i,hr, Tliq/Tsat
 
@@ -544,7 +551,7 @@ subroutine drainage(year,grid,dt)
 
 ! Subroutine to calculate drainage from soil layer based on equations in CLM 3.0 (coded by Leo O Lai, Aug 2021)
 
-use metvarsmod,   only : soilvars
+use statevarsmod,   only : soilvars
 use soilstatemod, only : nl,dz,dzmm,zpos,zposmm,zipos,ziposmm
 
 implicit none
@@ -610,7 +617,6 @@ end do
 !------------------
 ! Calculate lateral drainage from saturation fraction (fsat) (Eq. 7.117 & 7.118 CLM3.0)
 
-
 ! wb_sum1 = 0.
 ! wb_sum2 = 0.
 !
@@ -667,7 +673,7 @@ end subroutine drainage
 
 subroutine aquifier(grid,dt,qover)
 
-use metvarsmod,   only : soilvars
+use statevarsmod,   only : soilvars
 use soilstatemod, only : nl
 
 integer(i4), intent(in) :: grid

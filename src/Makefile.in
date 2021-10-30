@@ -106,17 +106,19 @@ PROGRAMS = $(bin_PROGRAMS)
 am_alvar_OBJECTS = parametersmod.$(OBJEXT) errormod.$(OBJEXT) \
 	coordsmod.$(OBJEXT) geohashmod.$(OBJEXT) statsmod.$(OBJEXT) \
 	utilitiesmod.$(OBJEXT) newsplinemod.$(OBJEXT) \
-	orbitmod.$(OBJEXT) daylengthmod.$(OBJEXT) metvarsmod.$(OBJEXT) \
-	soilstatemod.$(OBJEXT) soilphysicsmod.$(OBJEXT) \
-	diurnaltempmod.$(OBJEXT) radiationmod.$(OBJEXT) \
-	randomdistmod.$(OBJEXT) weathergenmod.$(OBJEXT) \
-	hourlyprecmod.$(OBJEXT) aetalphamod.$(OBJEXT) \
-	biome1mod.$(OBJEXT) hydrologymod.$(OBJEXT) gppmod.$(OBJEXT) \
-	fireindexmod.$(OBJEXT) getdatamod.$(OBJEXT) \
-	outputmod.$(OBJEXT) netcdfinputmod.$(OBJEXT) \
-	netcdfoutputmod.$(OBJEXT) gwgenmod.$(OBJEXT) \
-	gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) modelmod.$(OBJEXT) \
-	main.$(OBJEXT)
+	orbitmod.$(OBJEXT) daylengthmod.$(OBJEXT) \
+	statevarsmod.$(OBJEXT) soilstatemod.$(OBJEXT) \
+	soilphysicsmod.$(OBJEXT) diurnaltempmod.$(OBJEXT) \
+	radiationmod.$(OBJEXT) randomdistmod.$(OBJEXT) \
+	weathergenmod.$(OBJEXT) hourlyprecmod.$(OBJEXT) \
+	aetalphamod.$(OBJEXT) biome1mod.$(OBJEXT) \
+	hydrologymod.$(OBJEXT) gppmod.$(OBJEXT) nppmod.$(OBJEXT) \
+	establishmentmod.$(OBJEXT) turnovermod.$(OBJEXT) \
+	allocationmod.$(OBJEXT) fireindexmod.$(OBJEXT) \
+	getdatamod.$(OBJEXT) outputmod.$(OBJEXT) \
+	netcdfinputmod.$(OBJEXT) netcdfoutputmod.$(OBJEXT) \
+	gwgenmod.$(OBJEXT) gwgenmodnew.$(OBJEXT) drivermod.$(OBJEXT) \
+	modelmod.$(OBJEXT) main.$(OBJEXT)
 alvar_OBJECTS = $(am_alvar_OBJECTS)
 alvar_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -308,36 +310,40 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 alvar_SOURCES = \
-  parametersmod.f90  \
-  errormod.f90       \
-  coordsmod.f90      \
-  geohashmod.f90     \
-  statsmod.f90       \
-	utilitiesmod.f90	 \
-	newsplinemod.f90 	 \
-	orbitmod.f90 			 \
-	daylengthmod.f90 	 \
-	metvarsmod.f90		 \
-	soilstatemod.f90   \
-	soilphysicsmod.f90 \
-	diurnaltempmod.f90 \
-	radiationmod.f90 	 \
-	randomdistmod.f90  \
-	weathergenmod.f90  \
-	hourlyprecmod.f90  \
-	aetalphamod.f90    \
-	biome1mod.f90			 \
-	hydrologymod.f90   \
-	gppmod.f90         \
-	fireindexmod.f90   \
-  getdatamod.f90     \
-  outputmod.f90      \
-	netcdfinputmod.f90 \
-	netcdfoutputmod.f90\
-  gwgenmod.f90			 \
-	gwgenmodnew.f90    \
-	drivermod.f90 		 \
-	modelmod.f90 			 \
+  parametersmod.f90    \
+  errormod.f90         \
+  coordsmod.f90        \
+  geohashmod.f90       \
+  statsmod.f90         \
+	utilitiesmod.f90	   \
+	newsplinemod.f90 	   \
+	orbitmod.f90 			   \
+	daylengthmod.f90 	   \
+	statevarsmod.f90	   \
+	soilstatemod.f90     \
+	soilphysicsmod.f90   \
+	diurnaltempmod.f90   \
+	radiationmod.f90 	   \
+	randomdistmod.f90    \
+	weathergenmod.f90    \
+	hourlyprecmod.f90    \
+	aetalphamod.f90      \
+	biome1mod.f90			   \
+	hydrologymod.f90     \
+	gppmod.f90           \
+	nppmod.f90           \
+	establishmentmod.f90 \
+	turnovermod.f90      \
+	allocationmod.f90    \
+	fireindexmod.f90     \
+  getdatamod.f90       \
+  outputmod.f90        \
+	netcdfinputmod.f90   \
+	netcdfoutputmod.f90  \
+  gwgenmod.f90			   \
+	gwgenmodnew.f90      \
+	drivermod.f90 		   \
+	modelmod.f90 			   \
 	main.f90
 
 all: all-am

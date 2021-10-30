@@ -33,7 +33,7 @@ contains
 subroutine diurnaltemp(grid,day)
 
 ! use statevars,   only : sv,gridded,dayl
-use metvarsmod,  only : dayvars,gridlat,lprint,gprint
+use statevarsmod,  only : dayvars,gridlat,lprint,gprint
 
 !arguments
 integer(i4), intent(in) :: grid
@@ -254,7 +254,7 @@ subroutine humidity(grid,day)
 ! From Lawrence (2005) The relationship between relative humidity and the dewpoint temperature. A. MetSoc (https://doi.org/10.1175/BAMS-86-2-225)
 ! Equation (11)
 
-use metvarsmod, only : dayvars
+use statevarsmod, only : dayvars
 
 implicit none
 

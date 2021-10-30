@@ -81,7 +81,7 @@ subroutine soilprep(grid)
 ! Code copied (and combined) from LPJ-LMFire (simplesoilmod.f90) and ARVE-DGVM (init_model_state.f90)
 ! by Leo O Lai (Jul 2021)
 
-use metvarsmod, only : soilvars
+use statevarsmod, only : soilvars
 
 implicit none
 

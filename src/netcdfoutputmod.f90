@@ -3,7 +3,7 @@ module netcdfoutputmod
 use parametersmod, only : i2,i4,sp,dp,missing_i2
 use errormod,      only : ncstat,netcdf_err
 use outputmod,     only : infompi
-use metvarsmod,    only : dayvars,soilvars,vegvars,ndyear,nd,calcyrs,ilen
+use statevarsmod,  only : dayvars,soilvars,vegvars,ndyear,nd,calcyrs,ilen
 use biome1mod,     only : biomevars,biome_mean
 use weathergenmod, only : roundto
 use netcdf
@@ -253,7 +253,7 @@ ncstat = nf90_inq_varid(ofid,'gpp',varid)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 do i = 1, ndyear
-  outvar_r(:,i) = vegvars(:,i)%C_leaf
+  outvar_r(:,i) = vegvars(:,i)%sm_ind
 end do
 
 ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])

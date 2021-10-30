@@ -18,13 +18,13 @@ use randomdistmod,
 use newsplinemod,  only : newspline_all
 use weathergenmod, only : metvars_in,metvars_out,weathergen,rmsmooth,roundto
 use getdatamod,    only : readdata
-use metvarsmod,    only : genvars
+use statevarsmod,    only : genvars
 use outputmod,     only : putlonlat,infompi
 use netcdf
 use mpi
 
 
-use metvarsmod,    only : monvars,dayvars
+use statevarsmod,    only : monvars,dayvars
 
 implicit none
 

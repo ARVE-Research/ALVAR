@@ -31,7 +31,7 @@ subroutine gpp(year,grid,day)
 !       Bernacchi et al. (2001) Improved temperature response functions for models of Rubisco-limited photosyn-thesis, Plant, Cell and Environment, 24, 253–259
 
 use utilitiesmod, only : getmonth
-use metvarsmod,   only : ndyear,dayvars,soilvars,vegvars,topovars,gprint,lprint
+use statevarsmod,   only : ndyear,dayvars,soilvars,vegvars,topovars,gprint,lprint
 use biome1mod,    only : biomevars
 
 integer(i4), intent(in) :: year
@@ -104,6 +104,7 @@ real(sp), pointer :: gpp_tot              ! Total daily gross primary productivi
 real(sp), pointer :: rd                   ! Daily leaf respiration (gC m-2 d-1) >> whole day include day + night
 real(sp), pointer :: dgp                  ! Optimal daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
 real(sp), pointer :: dgc                  ! Actual daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
+real(sp), pointer :: dwscal
 
 real(sp), pointer :: elev                 ! Elevation (m)
 real(sp), pointer :: cellarea             ! Area of gridcell (m2)
@@ -173,7 +174,6 @@ real(sp) :: rtbis
 real(sp) :: dx
 real(sp) :: fmid
 
-
 integer :: it
 
 !-------------------------
@@ -201,6 +201,7 @@ rd => vegvars(grid,day)%rd
 
 dgp     => vegvars(grid,day)%dgp
 dgc     => vegvars(grid,day)%dgc
+dwscal => vegvars(grid,day)%dwscal
 
 dpet => dayvars(grid,day)%dpet
 
@@ -274,6 +275,7 @@ ca = ci / chi0
 
 !-------------------------
 ! Calculate GPP (Eq. 2 and 3 in Wang et al. 2017)
+! NOTE: Estimated global GPP at 123 +/- 8 Pg C per year (Beer et al., 2010)
 
 m = (ca - gammastar) / (ca + 2.0 * gammastar + 3 * gammastar * sqrt(1.6 * visco * (vpd / 1.e3) * beta_inv / (Kmm + gammastar)))
 
@@ -295,7 +297,7 @@ inhibx2 = 25.0
 inhibx3 = 30.0
 inhibx4 = 55.0
 
-rootprop = 0.9          ! Root proportion
+rootprop = 1.0          ! Root proportion
 gminp = 0.3             ! Minimum canopy conductance (mm s-1)
 
 !-------------------------
@@ -358,9 +360,12 @@ adtmm0 = ((adt0 / cmass) * 8.314 * (tmean + 273.3) / P) * 1000.
 dgp = (((1.6 * adtmm0) / ((ca / P) * (1. - chi0)))) / (dayl * 3600.) + gminp
 
 ! Calculate supply and demand of water on current day (mm d-1)
-supply = 5.0 * rootprop * sum(soilvars(grid)%Tliq(1:3)) / 3.
+supply = 5.0 * rootprop * sum(soilvars(grid)%Tliq(1:6)) / 6.
 
 demand = dpet * 1.4 * (1 - exp(-dgp / 5.))
+
+! Calculate water stress factor
+dwscal = min(1.0, supply / demand)
 
 !-------------------------
 ! Determine the actual canopy conductance rate
@@ -485,14 +490,11 @@ else  !infinitesimal canopy conductance
 
 end if  !canopy conductance
 
-
-! if (agd1 > gpp0 .and. xmid < chi0) print *, fmid, dgp, dgc, adtmm, adtmm1, it, xmid, chi0, agd1, agd, gpp0
-
-
+!------
 
 if (supply < demand .and. dayvars(grid,day)%dpet > 0. .and. gpp0 > 0.) then
 
-  if (year >= 2) then
+  if (year >= 30) then
 
     gpp1 = gpp1
     gpp_tot = gpp1 * cellarea * areafrac
@@ -506,7 +508,7 @@ if (supply < demand .and. dayvars(grid,day)%dpet > 0. .and. gpp0 > 0.) then
 
 else
 
-  if (year >= 2) then
+  if (year >= 30) then
 
     gpp1 = gpp1
     gpp_tot = gpp1 * cellarea * areafrac
@@ -528,6 +530,7 @@ if (areafrac == 0.) then
 end if
 
 
+! if (gpp1 > 0. .and. year >= 2) print *, fmid, dgp, dgc, it, chi0, gpp0, gpp_tot, rd * cellarea * areafrac, C_leaf, gtemp
 
 
 end subroutine gpp
@@ -536,7 +539,7 @@ end subroutine gpp
 
 subroutine leafcarbon(grid,day)
 
-use metvarsmod, only : vegvars
+use statevarsmod, only : vegvars
 
 implicit none
 
@@ -607,7 +610,7 @@ end subroutine leafcarbon
 
 subroutine lai(grid,day)
 
-use metvarsmod, only : vegvars,gprint,lprint
+use statevarsmod, only : vegvars,gprint,lprint
 
 implicit none
 

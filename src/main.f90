@@ -127,7 +127,7 @@ contains
 
 subroutine startmpi(info,srt,cnt)
 
-use metvarsmod, only : startyr,calcyrs
+use statevarsmod, only : startyr,calcyrs
 
 type(infompi), target              , intent(inout) :: info
 integer(i4),           dimension(:), intent(inout) :: srt

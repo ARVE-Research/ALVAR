@@ -1,7 +1,7 @@
 module biome1mod
 
 use parametersmod, only : i2,i4,sp,dp,missing_i2
-use metvarsmod,    only : genvars,dayvars,ndyear,cnt,calcyrs
+use statevarsmod,    only : genvars,dayvars,ndyear,cnt,calcyrs
 
 implicit none
 
@@ -127,7 +127,7 @@ subroutine calcbiome_year(year,grid)
 ! Subroutine to calculate biome type based on met variables (code copied from BIOME1) - Leo O Lai (June 2021)
 ! Input variables modified for the ALVAR model
 
-use metvarsmod, only : vegvars
+use statevarsmod, only : vegvars
 
 implicit none
 

@@ -1,4 +1,4 @@
-module metvarsmod
+module statevarsmod
 
 use parametersmod, only : i2,i4,sp,dp
 use orbitmod,      only : orbitpars
@@ -163,6 +163,9 @@ type veg_vars
   real(sp) :: gpp0          ! Gross primary productivity under non-water stressed condition (g C m-2 d-1)
   real(sp) :: gpp           ! Gross primary productivity under actual condition (g C m-2 d-1)
   real(sp) :: gpp_tot       ! Total daily gross primary productivity (g C d-1)
+  real(sp) :: npp0
+  real(sp) :: npp_tot
+  real(sp) :: aresp
   real(sp) :: rd            ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
   real(sp) :: chi           ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
   real(sp) :: chi0          ! Optimal leaf internal / external CO2 partial pressure ratio (fraction)
@@ -174,6 +177,28 @@ type veg_vars
   real(sp) :: C_leaf        ! Leaf carbon (gC m-2)
 
   integer(i4) :: biome      ! Biome classification from biome1
+
+  ! LPJ adapted vegetation variables
+  logical :: present
+  logical :: estab
+  logical :: survive
+  real(sp) :: dwscal
+  real(sp) :: fpc_grid
+  real(sp) :: fpc_ind
+  real(sp) :: fpc_inc
+  real(sp) :: nind
+  real(sp) :: stemdiam
+  real(sp) :: height
+  real(sp) :: crownarea
+  real(sp) :: lai_ind
+  real(sp) :: hm_ind
+  real(sp) :: lm_ind
+  real(sp) :: sm_ind
+  real(sp) :: rm_ind
+  real(sp) :: litter_ag_fast
+  real(sp) :: litter_ag_slow
+  real(sp) :: litter_bg
+  real(sp) :: turnover_ind
 
 end type veg_vars
 
@@ -241,4 +266,4 @@ integer :: p0
 integer :: p1
 
 
-end module metvarsmod
+end module statevarsmod

@@ -27,7 +27,7 @@ use netcdf
 use mpi
 
 
-use metvarsmod,    only : monvars,dayvars
+use statevarsmod,    only : monvars,dayvars
 
 implicit none
 

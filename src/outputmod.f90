@@ -36,7 +36,7 @@ contains
 
 subroutine getoutfile(info)
 
-use metvarsmod, only : startyr,calcyrs
+use statevarsmod, only : startyr,calcyrs
 
 implicit none
 
@@ -724,7 +724,7 @@ subroutine printgrid(info,grid,year,day)
 
 ! Subroutine to print user-specified lon/lat (grid) from command line (Leo Lai Apr 2021)
 
-use metvarsmod, only : startyr,dayvars
+use statevarsmod, only : startyr,dayvars
 
 implicit none
 

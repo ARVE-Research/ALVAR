@@ -80,7 +80,7 @@ end subroutine initairmass
 
 subroutine calcPjj(grid,day)
 
-use metvarsmod, only : genvars,dayvars    ! modified for weathergen (Leo O Lai Apr 2021)
+use statevarsmod, only : genvars,dayvars    ! modified for weathergen (Leo O Lai Apr 2021)
 
 implicit none
 
@@ -148,7 +148,7 @@ subroutine elev_Ratm(grid,day)
 ! Calculate variables for atmospheric pressure relative to sea-level
 ! Equations copied from ARVE-DGVM (Leo Lai, Jul 2021)
 
-use metvarsmod, only : dayvars,elev
+use statevarsmod, only : dayvars,elev
 
 implicit none
 
@@ -192,7 +192,7 @@ subroutine radpet(grid,dyr,iter)
 
 use parametersmod, only : midday
 use orbitmod,      only : orbitpars,toa_insolation,orbit
-use metvarsmod,    only : genvars,dayvars,gridlat,topovars
+use statevarsmod,    only : genvars,dayvars,gridlat,topovars
 
 implicit none
 
@@ -628,7 +628,7 @@ subroutine surf_lw(iter,grid,dyr,temp,tmin,cldf,dayl,lw_rad,tdew)
 !Jed Kaplan, EPFL, 2008, 2011
 
 use parametersmod, only : Tfreeze
-use metvarsmod,    only : dayvars
+use statevarsmod,    only : dayvars
 
 implicit none
 
@@ -767,7 +767,7 @@ subroutine calcVPD(grid,dyr)
 ! Reference: Thornton et al. (2000) doi:10.1016/S0168-1923(00)00170-2
 
 use parametersmod, only : Tfreeze
-use metvarsmod,    only : dayvars
+use statevarsmod,    only : dayvars
 
 implicit none
 
@@ -987,7 +987,7 @@ subroutine radslope(grid,day,dayl,delta,lat,toa_sw,direct,diffuse,sloperad)
 ! Equations taken from MT-CLIM model (mtclim43.c), coded for ALVAR by Leo O Lai (Aug, 2021)
 
 use parametersmod, only : d2r,r2d,pi
-use metvarsmod,    only : topovars
+use statevarsmod,    only : topovars
 
 integer(i4), intent(in)  :: grid          ! Grid number
 integer(i4), intent(in)  :: day           ! Julian day (1 to 366)
@@ -1171,7 +1171,7 @@ end subroutine radslope
 subroutine calctdew(grid,day)
 
 use parametersmod, only : pi,d2r,r2d
-use metvarsmod,    only : genvars,dayvars,gridlon,gridlat
+use statevarsmod,    only : genvars,dayvars,gridlon,gridlat
 
 implicit none
 
@@ -1284,7 +1284,7 @@ subroutine tdewpet(grid,d)
 
 ! Iterative subroutine to calculate dewpoint temperature and PET until stable solution
 
-use metvarsmod, only : dayvars,elev
+use statevarsmod, only : dayvars,elev
 
 implicit none
 

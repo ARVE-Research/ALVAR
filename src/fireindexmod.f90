@@ -21,7 +21,7 @@ subroutine fireindex(rank,year,grid,day)
 ! Equations from Noble et al. (1980) McArthur's fire danger meters expressed as equations https://doi.org/10.1111/j.1442-9993.1980.tb01243.x
 ! Coded by Leo Lai as part of ALVAR model extension (Jul 2021)
 
-use metvarsmod, only : dayvars,genvars,ndyear,cnt,topovars
+use statevarsmod, only : dayvars,genvars,ndyear,cnt,topovars
 
 integer(i4), intent(in) :: rank
 integer(i4), intent(in) :: year

@@ -1,7 +1,7 @@
 module netcdfinputmod
 
 use parametersmod, only : i2,i4,sp,dp
-use metvarsmod,    only : xlen,ylen,ilen,tlen,lon,lat,indx,time,elev,srt,cnt,cntt,p0,p1,monvars,soilvars
+use statevarsmod,    only : xlen,ylen,ilen,tlen,lon,lat,indx,time,elev,srt,cnt,cntt,p0,p1,monvars,soilvars
 use soilstatemod,  only : nl,zpos
 use outputmod,     only : infompi
 use errormod,      only : ncstat,netcdf_err
@@ -365,7 +365,7 @@ subroutine topodatainput(info)
 
 ! Read in the full array all gridcells and all layers, of topographic variales (slope and aspect)
 
-use metvarsmod, only : topovars
+use statevarsmod, only : topovars
 
 implicit none
 
@@ -557,7 +557,7 @@ subroutine LAIdatainput(info)
 ! Read in the full array all gridcells and all layers, of soil variales (sand, clay and cfvo composition)
 
 use utilitiesmod, only : getmonth
-use metvarsmod,   only : vegvars,ndyear
+use statevarsmod,   only : vegvars,ndyear
 
 type(infompi), target, intent(in) :: info
 
@@ -568,8 +568,8 @@ integer :: varid
 integer(i4) :: gridstart
 integer(i4) :: gridcount
 
-integer(i2), allocatable, dimension(:,:) :: var_in
-real(sp),    allocatable, dimension(:,:) :: values
+real(sp), allocatable, dimension(:,:) :: var_in
+real(sp), allocatable, dimension(:,:) :: values
 
 real(sp)    :: scale_factor
 real(sp)    :: add_offset
@@ -612,7 +612,7 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 scale_factor = 1.0
 
 where (var_in /= missing_value)
-  values = real(var_in) * scale_factor
+  values = var_in
 elsewhere
   values = -9999.
 end where

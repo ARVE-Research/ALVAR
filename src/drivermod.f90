@@ -15,7 +15,7 @@ contains
 subroutine initdate(info,job,rank)
 
 use parametersmod, only : baseyr,ndaymonth
-use metvarsmod   , only : startyr,endyr,calcyrs,nd,srt,cnt,cntt,p0,p1,tlen
+use statevarsmod   , only : startyr,endyr,calcyrs,nd,srt,cnt,cntt,p0,p1,tlen
 
 implicit none
 
@@ -119,7 +119,7 @@ subroutine initlonlat(info,job,rank)
 ! 1. Save current lon and lat of the gridcells into gridlon and gridlat
 ! 2. Decide if the current CPU process would require to print
 
-use metvarsmod, only : lon,lat,indx,srt,cnt,gridlon,gridlat,lprint,gprint
+use statevarsmod, only : lon,lat,indx,srt,cnt,gridlon,gridlat,lprint,gprint
 
 implicit none
 
@@ -192,7 +192,7 @@ end subroutine initlonlat
 
 subroutine initmonvars()
 
-use metvarsmod, only : cnt,cntt,monvars
+use statevarsmod, only : cnt,cntt,monvars
 
 implicit none
 
@@ -225,7 +225,7 @@ end subroutine initmonvars
 
 subroutine initsoilvars()
 
-use metvarsmod,    only : soilvars,cnt
+use statevarsmod,    only : soilvars,cnt
 
 implicit none
 
@@ -247,7 +247,7 @@ end subroutine initsoilvars
 
 subroutine initvegvars()
 
-use metvarsmod,    only : vegvars,cnt,ndyear
+use statevarsmod,    only : vegvars,cnt,ndyear
 
 implicit none
 
@@ -270,7 +270,7 @@ end subroutine initvegvars
 
 subroutine inittopovars()
 
-use metvarsmod,    only : topovars,cnt
+use statevarsmod,    only : topovars,cnt
 
 implicit none
 
@@ -292,7 +292,7 @@ end subroutine inittopovars
 
 subroutine copygenvars(year,grid)
 
-use metvarsmod,    only : nd,monvars,genvars
+use statevarsmod,    only : nd,monvars,genvars
 
 implicit none
 
@@ -352,7 +352,7 @@ end subroutine copygenvars
 
 subroutine initdayvars(year,gridcount)
 
-use metvarsmod,    only : nd,ndyear,dayvars
+use statevarsmod,    only : nd,ndyear,dayvars
 
 implicit none
 
@@ -384,7 +384,7 @@ end subroutine initdayvars
 subroutine initgeorndst()
 
 use randomdistmod, only : georndst
-use metvarsmod,    only : cnt
+use statevarsmod,    only : cnt
 
 implicit none
 
@@ -402,7 +402,7 @@ subroutine saveclonlat(grid)
 
 ! Save current lon and lat of the current gridcell into 'clon' and 'clat'
 
-use metvarsmod,    only : lon,lat,indx,srt,cnt,clon,clat
+use statevarsmod,    only : lon,lat,indx,srt,cnt,clon,clat
 
 implicit none
 

@@ -18,7 +18,7 @@ subroutine soilthermalprop(grid)
 ! account for organic matter and coarse fragments in the soil
 ! Code adapted from ARVE-DGVM (Leo Lai, Aug 2021) --> original in daily_calcs day/night loop
 
-use metvarsmod,   only : soilvars
+use statevarsmod,   only : soilvars
 use soilstatemod, only : nl,dz,dzmm,zpos,zposmm,zipos,ziposmm
 
 implicit none
@@ -163,7 +163,7 @@ subroutine resistance(grid,day)
 ! Added  to ARVE-DGVM Oct 08 08 Joe Melton 2008, adapted for ALVAR (Leo Lai Aug 2021)
 !     --> Currently simplied version with ONLY BARE SURFACE
 
-use metvarsmod,   only : dayvars,soilvars,gprint,lprint
+use statevarsmod,   only : dayvars,soilvars,gprint,lprint
 
 integer(i4), intent(in) :: grid
 integer(i4), intent(in) :: day
@@ -228,7 +228,7 @@ end subroutine resistance
 
 subroutine soiltemperature(grid,day,i)
 
-use metvarsmod,   only : dayvars,soilvars,gprint,lprint
+use statevarsmod,   only : dayvars,soilvars,gprint,lprint
 use soilstatemod, only : nl,dz,dzmm,zpos,zposmm,zipos,ziposmm
 use utilitiesmod, only : tridiag
 
@@ -361,6 +361,10 @@ end if
 ! Time-step dt = 3600 for now as subroutine written for constant 1 hour time-step
 dt = 3600.
 
+! TESTING - only one iteration per day night
+! dt = hr * 3600.
+! hr = 1
+
 !-------------------------
 ! Run water model in hourly time-step based on length of dayhour / nighthour
 hourloop : do h = 1, hr
@@ -435,7 +439,7 @@ hourloop : do h = 1, hr
 
 end do hourloop
 
-! if (lprint .and. grid==gprint) print *, day, i, hs, rah_b, tday,tnight, Tsoil-Tfreeze
+! if (lprint .and. grid==gprint) print *, day, i, hs, hr, tday,tnight, Tsoil-Tfreeze
 
 
 end subroutine soiltemperature

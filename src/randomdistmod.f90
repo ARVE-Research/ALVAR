@@ -61,7 +61,7 @@ subroutine genrndstate(grid)
 ! Generate a geohash randomstate speicifc to the gridcell
 
 use geohashmod,    only : geohash
-use metvarsmod,    only : lon,lat,indx,srt
+use statevarsmod,    only : lon,lat,indx,srt
 
 implicit none
 

@@ -5,7 +5,7 @@ module modelmod
 use parametersmod,   only : i2,i4,sp,dp
 use outputmod,       only : infompi,printgrid
 use randomdistmod,   only : genrndstate
-use metvarsmod,      only : monvars,dayvars,soilvars,vegvars,startyr,calcyrs,genvars,dayvars,topovars, &
+use statevarsmod,    only : monvars,dayvars,soilvars,vegvars,startyr,calcyrs,genvars,dayvars,topovars, &
                             ndyear,srt,cnt,clon,clat,gridlon,gridlat,lprint,gprint
 use drivermod,       only : initdate,initlonlat,initmonvars,initsoilvars,initvegvars,inittopovars, &
                             initgeorndst,copygenvars,initdayvars,saveclonlat
@@ -18,7 +18,11 @@ use soilphysicsmod,  only : soilthermalprop,resistance,soiltemperature
 use hydrologymod,    only : soilwater
 use aetalphamod,     only : aet_alpha
 use biome1mod,       only : initbiomevars,savebiomevars,calcbiome_year,calcbiome_mean
-use gppmod,          only : gpp,lai,leafcarbon
+use gppmod,          only : gpp
+use nppmod,          only : npp
+use establishmentmod,only : sapling,bioclim,establishment
+use turnovermod,     only : turnover
+use allocationmod,   only : allocation
 use fireindexmod,    only : fireindex
 use netcdfinputmod,  only : metdatainput,soildatainput,topodatainput,LAIdatainput
 use netcdfoutputmod, only : netcdfoutput
@@ -189,6 +193,7 @@ yearloop : do yr = 1, calcyrs
 
   !------
 
+
   dayloop2 : do d = 1, ndyear
 
     diurnalloop : do i = 1, 2         ! 1 = day, 2 = night
@@ -203,13 +208,15 @@ yearloop : do yr = 1, calcyrs
 
           call resistance(grid,d)
 
-          ! call soiltemperature(grid,d,i)
+          call soiltemperature(grid,d,i)
 
-          if (yr >= 1 .and. i == 1) call leafcarbon(grid,d)
-
-          if (yr >= 2 .and. i == 1) call lai(grid,d)
+          ! if (yr >= 1 .and. i == 1) call leafcarbon(grid,d)
+          !
+          ! if (yr >= 2 .and. i == 1) call lai(grid,d)
 
           if (i == 1) call gpp(yr,grid,d)
+
+          if (i == 1) call npp(yr,grid,d)
 
         ! end if
 
@@ -217,9 +224,25 @@ yearloop : do yr = 1, calcyrs
 
     end do diurnalloop
 
-    if (d == ndyear) print *, rank,yr, d, sum(vegvars%gpp_tot)
+    ! if (yr < 5 .and. d == ndyear) print *, rank,yr, d, sum(vegvars%gpp_tot)
+    ! if (yr >= 5 .and. d == ndyear) print *, rank,yr, d, sum(vegvars%npp_tot)
 
   end do dayloop2
+
+
+  !------
+
+  gridloop_vegetation : do grid = 1, gridcount
+
+    if (yr == 1) call sapling(yr,grid,1)
+
+    call establishment(yr,grid,1)
+
+    call turnover(yr,grid,1)
+
+    call allocation(yr,grid,1)
+
+  end do gridloop_vegetation
 
   ! do grid = 1, gridcount
   !
@@ -228,7 +251,7 @@ yearloop : do yr = 1, calcyrs
   ! end do
 
   ! Output variables into netcdf file in parallel
-  call netcdfoutput(info,job,yr)
+  ! call netcdfoutput(info,job,yr)
 
   deallocate(dayvars)
 

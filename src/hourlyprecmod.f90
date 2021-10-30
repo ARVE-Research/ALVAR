@@ -32,7 +32,7 @@ subroutine hourlyprec(year,grid,day)
 ! Subroutine written by Leo O Lai (Jul 2021)
 
 use utilitiesmod, only : getmonth
-use metvarsmod,   only : dayvars,ndyear
+use statevarsmod,   only : dayvars,ndyear
 
 !arguments
 integer(i4), intent(in) :: year
