@@ -345,7 +345,7 @@ end do
 if (dayvars(grid,1)%daet == -9999.) biome = missing_i2
 
 biomevars(grid,year)%biome = biome(1)
-vegvars(grid,:)%biome = biome(1)
+vegvars(grid)%biome = biome(1)
 
 
 end subroutine calcbiome_year

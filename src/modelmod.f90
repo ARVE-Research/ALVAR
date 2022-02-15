@@ -5,9 +5,10 @@ module modelmod
 use parametersmod,   only : i2,i4,sp,dp
 use outputmod,       only : infompi,printgrid
 use randomdistmod,   only : genrndstate
-use statevarsmod,    only : monvars,dayvars,soilvars,vegvars,startyr,calcyrs,genvars,dayvars,topovars, &
+use pftparmod,       only : npft,pftparameters
+use statevarsmod,    only : monvars,dayvars,soilvars,gppvars,vegvars,startyr,calcyrs,genvars,dayvars,topovars, &
                             ndyear,srt,cnt,clon,clat,gridlon,gridlat,lprint,gprint
-use drivermod,       only : initdate,initlonlat,initmonvars,initsoilvars,initvegvars,inittopovars, &
+use drivermod,       only : initdate,initlonlat,initmonvars,initsoilvars,initgppvars,initvegvars,inittopovars, &
                             initgeorndst,copygenvars,initdayvars,saveclonlat
 use diurnaltempmod,  only : diurnaltemp,humidity
 use orbitmod,        only : orbit,calcorbitpars
@@ -18,15 +19,19 @@ use soilphysicsmod,  only : soilthermalprop,resistance,soiltemperature
 use hydrologymod,    only : soilwater
 use aetalphamod,     only : aet_alpha
 use biome1mod,       only : initbiomevars,savebiomevars,calcbiome_year,calcbiome_mean
+use phenologymod,    only : summerphenology
+use waterbalancemod, only : simplesoilLPJ
 use gppmod,          only : gpp
 use nppmod,          only : npp
 use establishmentmod,only : sapling,bioclim,establishment
 use lightmod,        only : light
 use turnovermod,     only : turnover
+use killplantmod,    only : killplant
 use allocationmod,   only : allocation
+use mortalitymod,    only : mortality
 use fireindexmod,    only : fireindex
 use netcdfinputmod,  only : metdatainput,soildatainput,topodatainput,LAIdatainput
-use netcdfoutputmod, only : netcdfoutput
+use netcdfoutputmod, only : netcdfoutput,netcdfoutput_onelayer
 use gwgenmod,        only : gwgen
 use gwgenmodnew,     only : gwgen_new
 use netcdf
@@ -71,6 +76,8 @@ call initmonvars()                  ! Initilize the dimensions of the metvars va
 
 call initsoilvars()                 ! Initialize the dimensions of the soilvars variales (allocate by gridcount)
 
+call initgppvars()                  ! Initialize the dimensions of the gppvars variables (allocate by gridcount and ndyear)
+
 call initvegvars()                  ! Initialize the dimensions of the vegvars variales (allocate by gridcount)
 
 call inittopovars()                 ! Initialize the dimensions of the topovar variales (allocate by gridcount)
@@ -89,6 +96,8 @@ call initgeorndst()                 ! Initialize dimension of the random state v
 
 call initbiomevars(calcyrs)         ! Initialize dimension of biomevars for saving annual met variables necessary for biome PFT (annual and long-term mean) estiamtes
 
+call pftparameters()                ! Initialize PFT-specific parameters
+
 !-----------------------------------------------------------
 
 gridcount = job(2)
@@ -99,6 +108,8 @@ yearloop : do yr = 1, calcyrs
   gridloop_soilprep : do grid = 1, gridcount
 
     if (yr == 1) call soilprep(grid)
+
+    if (yr == 1) call simplesoilLPJ(grid)       ! Currently stored in waterbalancemod.f90
 
   end do gridloop_soilprep
 
@@ -194,6 +205,22 @@ yearloop : do yr = 1, calcyrs
 
   !------
 
+  gridloop_vegetation : do grid = 1, gridcount
+
+    ! Copy 20 months (12 months +/- 4 months buffer) of monthly data
+    call copygenvars(yr,grid)
+
+    if (yr == 1) call sapling(yr,grid,1)
+
+    call bioclim(yr,grid,1)
+
+    call summerphenology(yr,grid,1)
+
+    call establishment(yr,grid,1)
+
+  end do gridloop_vegetation
+
+  !------
 
   dayloop2 : do d = 1, ndyear
 
@@ -203,59 +230,63 @@ yearloop : do yr = 1, calcyrs
 
         ! if (soilvars(grid)%validcell) then
 
-          call soilwater(rank,yr,grid,d,i)
+        ! call soilwater(rank,yr,grid,d,i)
 
-          call soilthermalprop(grid)
+        call soilthermalprop(grid)
 
-          call resistance(grid,d)
+        call resistance(grid,d)
 
-          call soiltemperature(grid,d,i)
+        call soiltemperature(grid,d,i)
 
-          ! if (yr >= 1 .and. i == 1) call leafcarbon(grid,d)
-          !
-          ! if (yr >= 2 .and. i == 1) call lai(grid,d)
+        if (i == 1) call gpp(yr,grid,d)
 
-          if (i == 1) call gpp(yr,grid,d)
-
-          if (i == 1) call npp(yr,grid,d)
-
-        ! end if
+        if (i == 1) call npp(yr,grid,d)
 
       end do gridloop_soilwater
 
     end do diurnalloop
 
-    if (d == ndyear) print *, rank,yr, d, sum(vegvars%gpp_tot), sum(vegvars%aresp), sum(vegvars%npp_tot)
+    if (d == ndyear) print *, rank,yr, d, &
+                sum(gppvars%gpp_tot(1)), sum(gppvars%gpp_tot(2)), sum(gppvars%gpp_tot(3)),&
+                sum(gppvars%gpp_tot(4)), sum(gppvars%gpp_tot(5)), &
+                sum(gppvars%aresp(1)), sum(gppvars%aresp(2)), sum(gppvars%aresp(3)), &
+                sum(gppvars%aresp(4)), sum(gppvars%aresp(5)), &
+                sum(gppvars%npp_tot(1)), sum(gppvars%npp_tot(2)), sum(gppvars%npp_tot(3)), &
+                sum(gppvars%npp_tot(4)), sum(gppvars%npp_tot(5))
 
   end do dayloop2
 
 
   !------
 
-  gridloop_vegetation : do grid = 1, gridcount
+  ! dayloop3 : do d = 1, ndyear
 
-    if (yr == 1) call sapling(yr,grid,1)
+  gridloop_vegetation2 : do grid = 1, gridcount
 
-    call establishment(yr,grid,1)
+    ! Copy 20 months (12 months +/- 4 months buffer) of monthly data
+    call copygenvars(yr,grid)
 
     call light(yr,grid,1)
 
     call turnover(yr,grid,1)
 
-    call allocation(yr,grid,1)
+    ! call killplant(yr,grid,1)
+
+    call allocation(yr,grid,ndyear)
 
     call light(yr,grid,1)
 
-  end do gridloop_vegetation
+    ! call mortality(yr,grid,1)
 
-  ! do grid = 1, gridcount
-  !
-  !   if (vegvars(grid,1)%gpp /= -9999.) vegvars(grid,:)%gpp = sum(vegvars(grid,:)%gpp)
-  !
-  ! end do
+  end do gridloop_vegetation2
+
+  ! end do dayloop3
+
+  !------
 
   ! Output variables into netcdf file in parallel
   ! call netcdfoutput(info,job,yr)
+  if (yr == calcyrs) call netcdfoutput_onelayer(info,job,yr)
 
   deallocate(dayvars)
 

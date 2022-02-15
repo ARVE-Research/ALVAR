@@ -595,7 +595,7 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 
 ! -----------------------------------------------------
-! INPUT: Read in sand composition
+! INPUT: Read in LAI data file
 
 allocate(var_in(gridcount,12))
 allocate(values(gridcount,12))
@@ -622,7 +622,7 @@ do i = 1, gridcount
 
     call getmonth(d,ndyear,month,sday,eday)
 
-    vegvars(i,d)%lai = values(i,month)
+    ! vegvars(i,d)%lai = values(i,month)
 
   end do
 end do

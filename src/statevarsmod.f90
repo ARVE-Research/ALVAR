@@ -1,6 +1,7 @@
 module statevarsmod
 
 use parametersmod, only : i2,i4,sp,dp
+use pftparmod,     only : npft
 use orbitmod,      only : orbitpars
 
 ! This module contains the data structures that are read, calculated and stored by other subroutines
@@ -156,51 +157,65 @@ type(soildata), target, allocatable, dimension(:) :: soilvars   ! Dimension allo
 
 !---------------------------------------------------------------------
 
+type gpp_vars
+
+  ! Derived datatype for daily productivity variables (GPP and NPP)
+  real(sp), dimension(npft) :: gammastar         ! Photorespiratory compensation point (Pa)
+  real(sp), dimension(npft) :: lambda            ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
+  real(sp), dimension(npft) :: chi0              ! Optimal leaf internal / external CO2 partial pressure ratio (fraction)
+  real(sp), dimension(npft) :: gpp0              ! Gross primary productivity under non-water stressed condition (g C m-2 d-1) --> (Wang et al., 2017)
+  real(sp), dimension(npft) :: gpp               ! Gross primary productivity under actual condition (g C m-2 d-1) --> (Sitch et al., 2003; LPJ)
+  real(sp), dimension(npft) :: gpp_tot           ! Total daily gross primary productivity (g C d-1)
+  real(sp), dimension(npft) :: npp               ! Net primary productivity (g C m-2 d-1)
+  real(sp), dimension(npft) :: npp_tot           ! Total net primary productivity (g C d-1)
+  real(sp), dimension(npft) :: aresp             ! Autotrophic maintenence respiration (g C m-2 d-1)
+  real(sp), dimension(npft) :: dgp               ! Optimal daily canopy conductance (mm m-2 s-1)
+  real(sp), dimension(npft) :: rd                ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
+  real(sp), dimension(npft) :: dgc               ! Actual daily canopy conductance (mm m-2 s-1)
+  real(sp), dimension(npft) :: dwscal            ! Daily water stress factor (supply/demand ratio)
+
+end type gpp_vars
+
+type(gpp_vars), target, allocatable, dimension(:,:) :: gppvars    ! Dimension allocate to number of gridcells : number of days
+
+!---------------------------------------------------------------------
+
 type veg_vars
 
-  ! Derived datatype for vegetation variables
-  real(sp) :: gammastar         ! Photorespiratory compensation point (Pa)
-  real(sp) :: gpp0              ! Gross primary productivity under non-water stressed condition (g C m-2 d-1) --> (Wang et al., 2017)
-  real(sp) :: gpp               ! Gross primary productivity under actual condition (g C m-2 d-1) --> (Sitch et al., 2003; LPJ)
-  real(sp) :: gpp_tot           ! Total daily gross primary productivity (g C d-1)
-  real(sp) :: npp               ! Net primary productivity (g C m-2 d-1)
-  real(sp) :: npp_tot           ! Total net primary productivity (g C d-1)
-  real(sp) :: aresp             ! Autotrophic maintenence respiration (g C m-2 d-1)
-  real(sp) :: rd                ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
-  real(sp) :: chi               ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
-  real(sp) :: chi0              ! Optimal leaf internal / external CO2 partial pressure ratio (fraction)
-  real(sp) :: dgp               ! Optimal daily canopy conductance (mm m-2 s-1)
-  real(sp) :: dgc               ! Actual daily canopy conductance (mm m-2 s-1
-  real(sp) :: lai               ! LAI from data input (m2 m-2)
-  real(sp) :: sla               ! Specific leaf area (m2 gC-1)
+  ! Derived datatype for vegetation variables adapted from LPJ-LMFire
+  real(sp), dimension(366) :: dphen        ! Phenology status of summergreen (proportion of leaf-on) (fraction)
+  real(sp), dimension(366) :: dphen_t      ! Temperature based phenology of summergreen (proportion of leaf-on) (fraction)
+  real(sp), dimension(366) :: dphen_w      ! Water based phenology of summergreen (proportion of leaf-on) (fraction)
+
+  logical , dimension(npft) :: present           ! PFT present
+  logical , dimension(npft) :: estab             ! PFT establishment
+  logical , dimension(npft) :: survive           ! PFT survival
+  real(sp), dimension(npft) :: lai               ! LAI from data input (m2 m-2)
+  real(sp), dimension(npft) :: sla               ! Specific leaf area (m2 gC-1)
+  real(sp), dimension(npft) :: fpc_grid          ! Foilage projective cover over grid (fraction)
+  real(sp), dimension(npft) :: fpc_ind           ! Foliage projective cover of individual (fraction)
+  real(sp), dimension(npft) :: fpc_inc           ! Foliage projective cover increment (fraction)
+  real(sp), dimension(npft) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
+  real(sp), dimension(npft) :: rm_ind            ! Root carbon mass of individual (gC m-2)
+  real(sp), dimension(npft) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
+  real(sp), dimension(npft) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
+  real(sp), dimension(npft) :: nind              ! PFT population
+  real(sp), dimension(npft) :: stemdiam          ! Tree stem diameter (m)
+  real(sp), dimension(npft) :: height            ! Tree height (m)
+  real(sp), dimension(npft) :: crownarea         ! Tree crownarea (m2)
+  real(sp), dimension(npft) :: lai_ind           ! Leaf area index of individual (m2 m-2)
+  real(sp), dimension(npft) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
+  real(sp), dimension(npft) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
+  real(sp), dimension(npft) :: litter_bg         ! Below ground litter pool (gC m-2)
+  real(sp), dimension(npft) :: turnover_ind      ! Total turnover of individual (gC m-2)
+  real(sp), dimension(npft) :: cstore            ! Carbon storage for growth respiration (gC m-2)
+  real(sp), dimension(npft) :: bm_inc            ! Total biomass increment (yearly at the moment) (gC m-2 yr-1)
 
   integer(i4) :: biome          ! Biome classification from BIOME1 subroutine
 
-  ! LPJ adapted vegetation variables
-  logical  :: present           ! PFT present
-  logical  :: estab             ! PFT establishment
-  logical  :: survive           ! PFT survival
-  real(sp) :: dwscal            ! Daily water stress factor (supply/demand ratio)
-  real(sp) :: fpc_grid          ! Foilage projective cover over grid (fraction)
-  real(sp) :: fpc_ind           ! Foliage projective cover of individual (fraction)
-  real(sp) :: fpc_inc           ! Foliage projective cover increment (fraction)
-  real(sp) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
-  real(sp) :: rm_ind            ! Root carbon mass of individual (gC m-2)
-  real(sp) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
-  real(sp) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
-  real(sp) :: nind              ! PFT population
-  real(sp) :: stemdiam          ! Tree stem diameter (m)
-  real(sp) :: height            ! Tree height (m)
-  real(sp) :: crownarea         ! Tree crownarea (m2)
-  real(sp) :: lai_ind           ! Leaf area index of individual (m2 m-2)
-  real(sp) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
-  real(sp) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
-  real(sp) :: litter_bg         ! Below ground litter pool (gC m-2)
-  real(sp) :: turnover_ind      ! Total turnover of individual (gC m-2)
-
 end type veg_vars
 
-type(veg_vars), target, allocatable, dimension(:,:) :: vegvars   ! Dimension allocate to number of gridcells
+type(veg_vars), target, allocatable, dimension(:) :: vegvars   ! Dimension allocate to number of gridcells
 
 !---------------------------------------------------------------------
 

@@ -245,6 +245,28 @@ end subroutine initsoilvars
 
 !---------------------------------------------------------------------
 
+subroutine initgppvars()
+
+use statevarsmod,    only : gppvars,cnt,ndyear
+
+implicit none
+
+integer :: gridcount
+integer :: i
+
+!-------------------
+
+gridcount = cnt(1)
+
+!-------------------
+
+allocate(gppvars(gridcount,366))
+
+
+end subroutine initgppvars
+
+!---------------------------------------------------------------------
+
 subroutine initvegvars()
 
 use statevarsmod,    only : vegvars,cnt,ndyear
@@ -260,7 +282,7 @@ gridcount = cnt(1)
 
 !-------------------
 
-allocate(vegvars(gridcount,366))
+allocate(vegvars(gridcount))
 
 
 end subroutine initvegvars
@@ -329,19 +351,12 @@ end   = end + 4
 !-------------------
 ! Copy monthly series from monvars into genvars for gwgen() input
 
-! tmp = monvars(grid)%tmp(start:end)
-! dtr = monvars(grid)%dtr(start:end)
-! pre = monvars(grid)%pre(start:end)
-! wet = monvars(grid)%wet(start:end)
-! cld = monvars(grid)%cld(start:end)
-! wnd = monvars(grid)%wnd(start:end)
-
-tmp = monvars(grid)%tmp(9:28)
-dtr = monvars(grid)%dtr(9:28)
-pre = monvars(grid)%pre(9:28)
-wet = monvars(grid)%wet(9:28)
-cld = monvars(grid)%cld(9:28)
-wnd = monvars(grid)%wnd(9:28)
+tmp = monvars(grid)%tmp(start:end)
+dtr = monvars(grid)%dtr(start:end)
+pre = monvars(grid)%pre(start:end)
+wet = monvars(grid)%wet(start:end)
+cld = monvars(grid)%cld(start:end)
+wnd = monvars(grid)%wnd(start:end)
 
 genvars%nd  = nd(start:end)
 

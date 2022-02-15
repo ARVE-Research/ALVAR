@@ -60,6 +60,7 @@ integer(i4), intent(in) :: day
 integer(i4), intent(in) :: i
 
 logical , pointer :: validcell
+real(sp), pointer, dimension(:) :: whc        ! Soil water holding capcity / available water content (mm)
 real(sp), pointer, dimension(:) :: Ksat       ! Soil water saturated conductivity (mm s-1)
 real(sp), pointer, dimension(:) :: Tsat       ! Soil water volumetric water content at saturation (fraction / m3 m-3)
 real(sp), pointer, dimension(:) :: Tpor       ! Soil volumetric porosity (liquid minus ice content (or stones?)) (fraction)
@@ -169,6 +170,7 @@ end if
 
 validcell => soilvars(grid)%validcell
 
+whc    => soilvars(grid)%whc
 Ksat   => soilvars(grid)%Ksat
 Tsat   => soilvars(grid)%Tsat
 Tpor   => soilvars(grid)%Tpor
@@ -234,6 +236,7 @@ dt = 3600.
 dt = hr * 3600.
 hr = 1
 prec_tot = sum(prec_tot)
+aet_tot  = sum(aet_tot)
 
 !-------------------------
 ! Run water model in hourly time-step based on length of dayhour / nighthour
@@ -540,7 +543,7 @@ end do hourloop
 !   print *, year, day, hprec, haet, qover, qinfl, Tliq/Tsat, dTliq_b
 ! end if
 
-! if (lprint .and. grid==gprint) print *, year, day,i,hr, Tliq/Tsat
+! if (lprint .and. grid==gprint) print *, year, day,i,hr, Tliq(1:3) / Tsat(1:3), whc(1:3), sum(hprec)
 
 
 end subroutine soilwater
@@ -617,34 +620,34 @@ end do
 !------------------
 ! Calculate lateral drainage from saturation fraction (fsat) (Eq. 7.117 & 7.118 CLM3.0)
 
-! wb_sum1 = 0.
-! wb_sum2 = 0.
-!
-! do l = nl-3, nl-1
-!
-!   Sr = min(1.0, Tliq(l) / Tsat(l))
-!
-!   wb_sum1 = wb_sum1 + Sr * dzmm(l) * Ku(l)
-!   wb_sum2 = wb_sum2 + dzmm(l) * Ku(l)
-!
-! end do
-!
-! wb = wb_sum1 / wb_sum2
-!
-! qdrai_dry = (1.0 - fsat) * kd * wb ** (2 * Bexp(1) + 3)
-!
-! qdrai_wet = fsat * lb * exp(-zw)
-!
-! !------------------
-! ! Allocatble lateral drainage to layers depending on vertical diffuion (Eq. 7.123 CLM3.0)
-! ! Oringal CLM3.0 has 10 layers and allocate lateral drainage to layers 6 to 9. Here we calculate lateral drainge for layer 3 to 5
-! ! However, lateral drainage current not applicable because of no inter-gridcell interaction
-!
-! do l = nl-3, nl-1
-!
-!   Wliq(l) = Wliq(l) - dt * (qdrai_dry + qdrai_wet) * dzmm(l) * Ku(l) / wb_sum2
-!
-! end do
+wb_sum1 = 0.
+wb_sum2 = 0.
+
+do l = nl-3, nl-1
+
+  Sr = min(1.0, Tliq(l) / Tsat(l))
+
+  wb_sum1 = wb_sum1 + Sr * dzmm(l) * Ku(l)
+  wb_sum2 = wb_sum2 + dzmm(l) * Ku(l)
+
+end do
+
+wb = wb_sum1 / wb_sum2
+
+qdrai_dry = (1.0 - fsat) * kd * wb ** (2 * Bexp(1) + 3)
+
+qdrai_wet = fsat * lb * exp(-zw)
+
+!------------------
+! Allocatble lateral drainage to layers depending on vertical diffuion (Eq. 7.123 CLM3.0)
+! Oringal CLM3.0 has 10 layers and allocate lateral drainage to layers 6 to 9. Here we calculate lateral drainge for layer 3 to 5
+! However, lateral drainage current not applicable because of no inter-gridcell interaction
+
+do l = nl-3, nl-1
+
+  Wliq(l) = Wliq(l) - dt * (qdrai_dry + qdrai_wet) * dzmm(l) * Ku(l) / wb_sum2
+
+end do
 
 !------------------
 ! Calculate drainage from bottom of soil column (from the bottom layer) (Eq. 7.116 CLM3.0)

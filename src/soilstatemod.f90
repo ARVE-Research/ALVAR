@@ -8,13 +8,13 @@ implicit none
 
 public :: soilprep
 
-private :: fbulk
-private :: fRock
-private :: calctheta
-private :: fKsat
-private :: fTsat
-private :: fPsat
-private :: fBexp
+! private :: fbulk
+! private :: fRock
+! private :: calctheta
+! private :: fKsat
+! private :: fTsat
+! private :: fPsat
+! private :: fBexp
 
 ! Number of soil layers
 integer(i4), parameter               :: nl = 6

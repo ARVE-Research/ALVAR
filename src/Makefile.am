@@ -9,6 +9,7 @@ alvar_SOURCES =        \
 	newsplinemod.f90 	   \
 	orbitmod.f90 			   \
 	daylengthmod.f90 	   \
+	pftparmod.f90        \
 	statevarsmod.f90	   \
 	soilstatemod.f90     \
 	soilphysicsmod.f90   \
@@ -20,11 +21,14 @@ alvar_SOURCES =        \
 	aetalphamod.f90      \
 	biome1mod.f90			   \
 	hydrologymod.f90     \
+	phenologymod.f90     \
+	waterbalancemod.f90  \
 	gppmod.f90           \
 	nppmod.f90           \
 	establishmentmod.f90 \
 	lightmod.f90         \
 	turnovermod.f90      \
+	killplantmod.f90     \
 	allocationmod.f90    \
 	mortalitymod.f90     \
 	fireindexmod.f90     \
