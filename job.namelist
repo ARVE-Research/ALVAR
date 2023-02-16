@@ -1,8 +1,8 @@
 &joboptions
   cfile_spinup    = '/home/leolaio/grid2list_spinup1871/spinup1871_list-formatted.nc'
   cfile_transient = '/home/terraces/datasets/dgvm_input/climate/transient1871-2010_list-formatted.nc'
-  soilfile        = '/home/terraces/projects/ALVAR_daily_WIP/soil30m_list-formatted.nc'
-  topofile        = '/home/terraces/projects/ALVAR_daily_WIP/world_slope_1800arcsec_list-formatted.nc'
+  soilfile        = '/home/terraces/projects/ALVAR/input/soil30m_list-formatted.nc'
+  topofile        = '/home/terraces/projects/ALVAR/input/world_slope_1800arcsec_list-formatted.nc'
   dospinup        = .true.
   dotransient     = .true,
   spin_baseyr     = 0

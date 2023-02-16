@@ -151,7 +151,7 @@ if (outmode == 1) call readgrdlist(gridlistfile,plon,plat)
 
 if (outmode == 1) call setgrid(lon,lat,plon,plat,ngrid,gruns)
 
-if (outmode == 1) call gentextfile(lon,lat,gruns,textfilenames)
+! if (outmode == 1) call gentextfile(lon,lat,gruns,textfilenames)
 
 if (outmode == 0) ngrid = gridcount
 
@@ -296,7 +296,7 @@ yearloop : do yr = 1, calcyrs
 
         call alvar_daily(yr,grid,ndyear,calcyrs,d,i,spinup)
 
-        if (outmode == 1) call printgrid(calcyrs,yr,d,i,grid,textfilenames(g),sv(grid))
+        ! if (outmode == 1) call printgrid(calcyrs,yr,d,i,grid,textfilenames(g),sv(grid))
 
       end do gridloop2
 
