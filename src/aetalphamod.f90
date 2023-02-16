@@ -8,7 +8,7 @@ implicit none
 ! Global variables
 ! integer(i4) :: gridcount = cnt(1)
 
-real(sp), allocatable, dimension(:) :: m       		! Instantaneous soil moisture (mm)
+real(dp), allocatable, dimension(:) :: m       		! Instantaneous soil moisture (mm)
 
 public :: aet_alpha
 
@@ -27,21 +27,21 @@ integer(i4), intent(in) :: day
 
 !arguments
 
-real(sp) :: awc             ! Total water holding capacity in the top meter of soil (mm); actually, total whc (mm3/mm3) multiplied by soil depth (mm) PMC 25 jan '10
-real(sp), pointer :: dayl   ! Day length (hr)
-real(sp), pointer :: prec   ! Daily precipitation (mm)
-real(sp), pointer :: dpet   ! Daily potential evapotranspiration (mm)
-real(sp), pointer :: daet   ! Daily actual evapotranspiration (mm)
-real(sp), pointer :: alpha  ! Ratio of AET/PET (fraction)
+real(dp) :: awc             ! Total water holding capacity in the top meter of soil (mm); actually, total whc (mm3/mm3) multiplied by soil depth (mm) PMC 25 jan '10
+real(dp), pointer :: dayl   ! Day length (hr)
+real(dp), pointer :: prec   ! Daily precipitation (mm)
+real(dp), pointer :: dpet   ! Daily potential evapotranspiration (mm)
+real(dp), pointer :: daet   ! Daily actual evapotranspiration (mm)
+real(dp), pointer :: alpha  ! Ratio of AET/PET (fraction)
 
 !parameters
 
-real(sp), parameter :: etmax = 1.0_sp  ! Maximum equilibrium evapotranspiration rate (mm h-1)
+real(dp), parameter :: etmax = 1.0_sp  ! Maximum equilibrium evapotranspiration rate (mm h-1)
 
 !local variables
-real(sp) :: Emd     ! Emax: maximum evapotranspiration rate from saturated soils(mm d-1)
-real(sp) :: supply  ! Water supply (mm)
-real(sp) :: demand  ! Water demand (mm)
+real(dp) :: Emd     ! Emax: maximum evapotranspiration rate from saturated soils(mm d-1)
+real(dp) :: supply  ! Water supply (mm)
+real(dp) :: demand  ! Water demand (mm)
 
 integer(i4) :: gridcount
 

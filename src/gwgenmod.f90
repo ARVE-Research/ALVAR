@@ -22,7 +22,7 @@ use daylengthmod,  only : daylength
 use diurnaltempmod,only : diurnaltemp
 use weathergenmod, only : metvars_in,metvars_out,weathergen,rmsmooth,roundto
 use getdatamod,    only : readdata
-use outputmod,     only : putlonlat,infompi
+use outputmod,     only : putlonlat,mpivars
 use netcdf
 use mpi
 
@@ -41,7 +41,7 @@ contains
 
 subroutine gwgen(info,job,rank)
 
-type(infompi), target    , intent(in) :: info
+type(mpivars), target    , intent(in) :: info
 integer(i4), dimension(2), intent(in) :: job
 integer                  , intent(in) :: rank
 
@@ -81,28 +81,28 @@ integer :: ll
 
 ! monthly input driver variables
 
-real(sp), allocatable, dimension(:,:) :: tmp        ! mean monthly temperature (degC)
-real(sp), allocatable, dimension(:,:) :: dtr        ! mean monthly diurnal temperature range (degC)
-real(sp), allocatable, dimension(:,:) :: pre        ! total monthly precipitation (mm)
-real(sp), allocatable, dimension(:,:) :: wet        ! number of days in the month with precipitation > 0.1 mm (days)
-real(sp), allocatable, dimension(:,:) :: cld        ! mean monthly cloud cover (fraction)
-real(sp), allocatable, dimension(:,:) :: wnd        ! mean monthly 10m windspeed (m s-1)
+real(dp), allocatable, dimension(:,:) :: tmp        ! mean monthly temperature (degC)
+real(dp), allocatable, dimension(:,:) :: dtr        ! mean monthly diurnal temperature range (degC)
+real(dp), allocatable, dimension(:,:) :: pre        ! total monthly precipitation (mm)
+real(dp), allocatable, dimension(:,:) :: wet        ! number of days in the month with precipitation > 0.1 mm (days)
+real(dp), allocatable, dimension(:,:) :: cld        ! mean monthly cloud cover (fraction)
+real(dp), allocatable, dimension(:,:) :: wnd        ! mean monthly 10m windspeed (m s-1)
 
 ! monthly derived driver variables
 
-real(sp), allocatable, dimension(:) :: mtmin      ! maximum monthly temperature (degC)
-real(sp), allocatable, dimension(:) :: mtmax      ! monthly minimum temperature (degC)
-real(sp), allocatable, dimension(:) :: wetf       ! fraction of wet days in a month
+real(dp), allocatable, dimension(:) :: mtmin      ! maximum monthly temperature (degC)
+real(dp), allocatable, dimension(:) :: mtmax      ! monthly minimum temperature (degC)
+real(dp), allocatable, dimension(:) :: wetf       ! fraction of wet days in a month
 
 ! output variable
 
-real(sp), allocatable, dimension(:) :: abs_tmin      ! absolute minimum temperature (degC)
-real(sp), allocatable, dimension(:) :: abs_tmax      ! absolute maximum temperature (degC)
+real(dp), allocatable, dimension(:) :: abs_tmin      ! absolute minimum temperature (degC)
+real(dp), allocatable, dimension(:) :: abs_tmax      ! absolute maximum temperature (degC)
 
 integer(i2), allocatable, dimension(:) :: outvar    ! Output variable for ncfile output adjusted by scale factor
 
-real(sp) :: tmin_sim
-real(sp) :: tmax_sim
+real(dp) :: tmin_sim
+real(dp) :: tmax_sim
 
 ! Elements to calculate current year and amount of days in current month
 
@@ -124,29 +124,29 @@ integer, parameter :: w = 3              ! filter half-width for smoothing of mo
 integer, parameter :: wbuf = 31*(1+2*w)  ! length of the buffer in which to hold the smoothed pseudo-daily  meteorological values (days)
 
 integer,  dimension(-w:w) :: ndbuf       ! number of days in the month
-real(sp), dimension(-w:w) :: mtminbuf    ! monthly minimum temperature
-real(sp), dimension(-w:w) :: mtmaxbuf    ! monthly maximum temperature
-real(sp), dimension(-w:w) :: cldbuf      ! monthly cloud fractions
-real(sp), dimension(-w:w) :: wndbuf      ! monthly wind speed
+real(dp), dimension(-w:w) :: mtminbuf    ! monthly minimum temperature
+real(dp), dimension(-w:w) :: mtmaxbuf    ! monthly maximum temperature
+real(dp), dimension(-w:w) :: cldbuf      ! monthly cloud fractions
+real(dp), dimension(-w:w) :: wndbuf      ! monthly wind speed
 
-real(sp), dimension(wbuf) :: tmin_sm     ! smoothed pseudo-daily values of min temperature
-real(sp), dimension(wbuf) :: tmax_sm     ! smoothed pseudo-daily values of max temperature
-real(sp), dimension(wbuf) :: cld_sm      ! smoothed pseudo-daily values of cloudiness
-real(sp), dimension(wbuf) :: wnd_sm      ! smoothed pseudo-daily values of wind speed
+real(dp), dimension(wbuf) :: tmin_sm     ! smoothed pseudo-daily values of min temperature
+real(dp), dimension(wbuf) :: tmax_sm     ! smoothed pseudo-daily values of max temperature
+real(dp), dimension(wbuf) :: cld_sm      ! smoothed pseudo-daily values of cloudiness
+real(dp), dimension(wbuf) :: wnd_sm      ! smoothed pseudo-daily values of wind speed
 
 ! quality control variables
 
 integer  :: mwetd_sim    ! simulated number of wet days
-real(sp) :: mprec_sim    ! simulated total monthly precipitation (mm)
+real(dp) :: mprec_sim    ! simulated total monthly precipitation (mm)
 
 integer  :: pdaydiff     ! difference between input and simulated wet days
-real(sp) :: precdiff     ! difference between input and simulated total monthly precipitation (mm)
+real(dp) :: precdiff     ! difference between input and simulated total monthly precipitation (mm)
 
-real(sp) :: prec_t       ! tolerance for difference between input and simulated total monthly precipitation (mm)
+real(dp) :: prec_t       ! tolerance for difference between input and simulated total monthly precipitation (mm)
 integer, parameter  :: wetd_t = 1  ! tolerance for difference between input and simulated wetdays (days)
 
 integer  :: pdaydiff1 = huge(i4)   ! stored value of the best match difference between input and simulated wet days
-real(sp) :: precdiff1 = huge(sp)   ! stored value of the difference between input and simulated total monthly precipitation (mm)
+real(dp) :: precdiff1 = huge(sp)   ! stored value of the difference between input and simulated total monthly precipitation (mm)
 
 ! data structures for meteorology
 
@@ -157,16 +157,16 @@ type(randomstate), allocatable, dimension(:) :: rndst   ! random state for each 
 
 type(metvars_out), dimension(31) :: month_met  ! buffer containing one month of simulated daily meteorology
 
-real(sp) :: mtmin_sim
-real(sp) :: mtmax_sim
-real(sp) :: mcldf_sim
-real(sp) :: mwind_sim
+real(dp) :: mtmin_sim
+real(dp) :: mtmax_sim
+real(dp) :: mcldf_sim
+real(dp) :: mwind_sim
 
-real(sp) :: prec_corr
-real(sp) :: tmin_corr
-real(sp) :: tmax_corr
-real(sp) :: cldf_corr
-real(sp) :: wind_corr
+real(dp) :: prec_corr
+real(dp) :: tmin_corr
+real(dp) :: tmax_corr
+real(dp) :: cldf_corr
+real(dp) :: wind_corr
 
 character(60) :: basedate
 
@@ -207,10 +207,10 @@ real :: end_time
 !
 ! type(metvars_out) :: met_test
 !
-! real(sp), dimension(12) :: temp_test
-! real(sp), dimension(12) :: prec_test
+! real(dp), dimension(12) :: temp_test
+! real(dp), dimension(12) :: prec_test
 !
-! real(sp) :: Pjj
+! real(dp) :: Pjj
 !
 ! temp_test = [14.,17.,18.,19.,20.,21.,32.,21.,20.,18.,18.,17.]
 ! prec_test = [0.,10.,20.,30.,40.,50.,80.,70.,60.,50.,40.,30.]

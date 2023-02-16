@@ -1,7 +1,5 @@
 module gwgenmodnew
 
-! Use the Makefile to compile this program
-
 !! Program to run gwgen with gridded input, provide global lon/lat indexed list output of
 !! absolute minimum and maximum temperature
 ! JO Kaplan, HKU, 2019; Leo O Lai, HKU, 2021
@@ -9,22 +7,6 @@ module gwgenmodnew
 ! Terminal command line: mpirun -np 18 ./src/gwgen ~/path/to/input.file startyr/calcyr ~/path/to/outfile
 
 ! List of modules that will be used and the variables within these modules that are used in this program:
-
-use parametersmod, only : sp,dp,i4,i2,so,ndaymonth
-use errormod,      only : ncstat,netcdf_err
-use coordsmod,     only : index,parsecoords,calcpixels
-use geohashmod,    only : geohash
-use randomdistmod,
-use newsplinemod,  only : newspline_all
-use weathergenmod, only : metvars_in,metvars_out,weathergen,rmsmooth,roundto
-use getdatamod,    only : readdata
-use statevarsmod,    only : genvars
-use outputmod,     only : putlonlat,infompi
-use netcdf
-use mpi
-
-
-use statevarsmod,    only : monvars,dayvars
 
 implicit none
 
@@ -36,32 +18,36 @@ contains
 
 !-------------------------------------------------------
 
-subroutine gwgen_new(grid)
+subroutine gwgen_new(georndst,tmp,dtr,pre,wet,cld,wnd,nd,tmin,tmax,prec,cldf,wind)
+
+use parametersmod, only : sp,dp,i4,i2,so,ndaymonth
+use randomdistmod, only : randomstate
+use newsplinemod,  only : newspline_all
+use weathergenmod, only : metvars_in,metvars_out,weathergen,roundto
 
 implicit none
 
-integer(i4), intent(in) :: grid
+type(randomstate),               intent(inout) :: georndst
+real(sp),          dimension(:), intent(inout) :: tmp
+real(sp),          dimension(:), intent(inout) :: dtr
+real(sp),          dimension(:), intent(inout) :: pre
+real(sp),          dimension(:), intent(inout) :: wet
+real(sp),          dimension(:), intent(inout) :: cld
+integer(i4),       dimension(:), intent(inout) :: nd
+real(sp),          dimension(:), intent(inout) :: wnd
+real(sp),          dimension(:), intent(out)   :: tmin            ! 24 hour mean minimum temperature (degC)
+real(sp),          dimension(:), intent(out)   :: tmax            ! 24 hour mean maximum temperature (degC)
+real(sp),          dimension(:), intent(out)   :: prec            ! 24 hour total precipitation (mm)
+real(sp),          dimension(:), intent(out)   :: cldf            ! 24 hour mean cloud cover (fraction)
+real(sp),          dimension(:), intent(out)   :: wind            ! 24 hour mean wind speed (m s-1)
 
-! Pointer variables to genvars
-
-real(sp), pointer, dimension(:) :: tmp        ! mean monthly temperature (degC)
-real(sp), pointer, dimension(:) :: dtr        ! mean monthly diurnal temperature range (degC)
-real(sp), pointer, dimension(:) :: pre        ! total monthly precipitation (mm)
-real(sp), pointer, dimension(:) :: wet        ! number of days in the month with precipitation > 0.1 mm (days)
-real(sp), pointer, dimension(:) :: cld        ! mean monthly cloud cover (fraction)
-real(sp), pointer, dimension(:) :: wnd        ! mean monthly 10m windspeed (m s-1)
-
-integer, pointer, dimension(:)  :: nd
-
-! monthly derived driver variables
+! Monthly derived driver variables
 ! Process 12 months monthly series (with +/- 4 months buffer) in each iteration
-
 real(sp), dimension(20) :: mtmin      ! maximum monthly temperature (degC)
 real(sp), dimension(20) :: mtmax      ! monthly minimum temperature (degC)
 real(sp), dimension(20) :: wetf       ! fraction of wet days in a month
 
 ! Elements to calculate current year and amount of days in current month
-
 integer :: i_count,outd
 integer :: i,k,t,d,m
 integer :: d0
@@ -70,7 +56,6 @@ integer :: ndm
 
 
 ! Variables for the smoothing process
-
 integer, parameter :: w = 3              ! filter half-width for smoothing of monthly mean climate variables to pseudo-daily values (months)
 integer, parameter :: wbuf = 31*(1+2*w)  ! length of the buffer in which to hold the smoothed pseudo-daily  meteorological values (days)
 
@@ -85,8 +70,7 @@ real(sp), dimension(wbuf) :: tmax_sm     ! smoothed pseudo-daily values of max t
 real(sp), dimension(wbuf) :: cld_sm      ! smoothed pseudo-daily values of cloudiness
 real(sp), dimension(wbuf) :: wnd_sm      ! smoothed pseudo-daily values of wind speed
 
-! quality control variables
-
+! Quality control variables
 integer  :: mwetd_sim    ! simulated number of wet days
 real(sp) :: mprec_sim    ! simulated total monthly precipitation (mm)
 
@@ -99,8 +83,7 @@ integer, parameter  :: wetd_t = 10  ! tolerance for difference between input and
 integer  :: pdaydiff1 = huge(i4)       ! stored value of the best match difference between input and simulated wet days
 real(sp) :: precdiff1 = huge(0.0_sp)   ! stored value of the difference between input and simulated total monthly precipitation (mm)
 
-! data structures for meteorology
-
+! Data structures for meteorology
 type(metvars_in)  :: met_in   ! structure containing one day of meteorology input to weathergen
 type(metvars_out) :: met_out  ! structure containing one day of meteorology output from weathergen
 
@@ -122,23 +105,11 @@ integer :: end
 
 integer :: baddata_check
 
-!---------------------------------------------------------------------
-! point to variables
-
-tmp => genvars%tmp
-dtr => genvars%dtr
-pre => genvars%pre
-wet => genvars%wet
-cld => genvars%cld
-wnd => genvars%wnd
-
-nd => genvars%nd
-
-! Assign the module random state to the current met_in
+! Assign the current grid randomstate to the current met_in
 ! The randomstate generated in last month of the year (Dec) will be saved back into the module variable
 ! This will carry onto the next year iteration, until all calcyears are finished
 ! at which the random state will be re-initiated by the genrndstate() in modelmod after moving on to next gridcell
-met_in%rndst = georndst(grid)
+met_in%rndst = georndst
 
 !---------------------------------------------------------------------
 ! calculate derived climate variables
@@ -394,6 +365,8 @@ monthloop : do m = 1, 13
     month_met%tmax = month_met%tmin + 0.1
   end where
 
+! print *, sum(month_met(1:ndm)%cldf)/ndm, cld(t),100*((100*sum(month_met(1:ndm)%cldf)/ndm)-cld(t))/cld(t)
+
   !-----------------------------------------------------------
   ! add the current monthly values on to the smoothing buffer
   ! write(0,*)cntt,t,w,t+w+1
@@ -413,11 +386,11 @@ monthloop : do m = 1, 13
 
   end = start + ndm - 1
 
-  dayvars(grid,start:end)%prec = month_met(1:ndm)%prec
-  dayvars(grid,start:end)%tmin = month_met(1:ndm)%tmin
-  dayvars(grid,start:end)%tmax = month_met(1:ndm)%tmax
-  dayvars(grid,start:end)%cldf = month_met(1:ndm)%cldf
-  dayvars(grid,start:end)%wind = month_met(1:ndm)%wind
+  prec(start:end) = month_met(1:ndm)%prec
+  tmin(start:end) = month_met(1:ndm)%tmin
+  tmax(start:end) = month_met(1:ndm)%tmax
+  cldf(start:end) = month_met(1:ndm)%cldf
+  wind(start:end) = month_met(1:ndm)%wind
 
   start = end + 1
 
@@ -425,8 +398,7 @@ end do monthloop ! month loop
 
 !-----------------------------------------------------------
 ! Save the randomstate from last output for next year iteration
-georndst(grid) = met_out%rndst
-
+georndst = met_out%rndst
 
 end subroutine gwgen_new
 

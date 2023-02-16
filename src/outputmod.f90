@@ -14,21 +14,6 @@ real(sp),    parameter :: missing_sp = -9999.
 integer(i2), parameter :: missing_i2 = -32768
 
 !--------------------
-! Derived type containing job information to be sent to all processes
-
-type infompi
-  character(100) :: infile          ! infile name
-  character(100) :: outfile         ! outfile name
-  character(100) :: timestring      ! timestring with startyr/calcyr
-  integer(i4)    :: nproc           ! number of processors
-  integer(i4)    :: validcell       ! number of validcells (no longer in use)
-  integer(i4)    :: t0              ! start of time dimension for reading input file
-  integer(i4)    :: nt              ! count of time dimension for reading input file
-  real(sp)       :: plon            ! lon of printing gridcell
-  real(sp)       :: plat            ! lat of printing gridcell
-end type
-
-!--------------------
 
 contains
 
@@ -36,23 +21,25 @@ contains
 
 subroutine getoutfile(info)
 
+use mpivarsmod,   only : ofid,mpivars
+use pftparmod,    only : npft
 use statevarsmod, only : startyr,calcyrs
 
 implicit none
 
-type(infompi), target, intent(in) :: info
+type(mpivars), target, intent(in) :: info
 
-character(100), pointer :: infile
-character(100), pointer :: outfile
+character(200), pointer :: infile
+character(200), pointer :: outfile
 integer(i4) ,   pointer :: validcell
 
 integer :: ifid
-integer :: ofid
+! integer :: ofid
 integer :: ncstat
 integer :: varid
 integer :: dimid
 
-integer, dimension(5) :: dimids
+integer, dimension(6) :: dimids
 
 integer :: xlen
 integer :: ylen
@@ -75,9 +62,9 @@ character(10) :: now
 
 !--------------------
 
-infile    => info%infile
+infile    => info%cfile_transient
 outfile   => info%outfile
-validcell => info%validcell
+validcell => info%ilen
 
 !--------------------
 
@@ -161,7 +148,7 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 ! ncstat = nf90_create_par(outfile,ior(nf90_netcdf4,nf90_mpiio),MPI_COMM_WORLD,MPI_INFO_NULL,ofid)
 ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_put_att(ofid,nf90_global,'title','weathergen parallel output file')
+ncstat = nf90_put_att(ofid,nf90_global,'title','ALVAR parallel output file')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 call date_and_time(today,now)
@@ -276,6 +263,27 @@ ncstat = nf90_put_att(ofid,varid,'long_name','time in number of years')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','years')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+
+!----
+! npft
+
+ncstat = nf90_def_dim(ofid,'pft',npft,dimid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+dimids(6) = dimid
+
+ncstat = nf90_def_var(ofid,'pft',nf90_int,dimid,varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,(/(i,i=1,npft,1)/))
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','pft number')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','1 to length')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 
@@ -616,7 +624,7 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 !----
 !GPP
 
-ncstat = nf90_def_var(ofid,'gpp',nf90_double,dimids(3:4),varid)
+ncstat = nf90_def_var(ofid,'gpp',nf90_double,[dimids(3),dimids(5),dimids(6)],varid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','gross primary productivity')
@@ -634,7 +642,7 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 !----
 !NPP
 
-ncstat = nf90_def_var(ofid,'npp',nf90_double,dimids(3:4),varid)
+ncstat = nf90_def_var(ofid,'npp',nf90_double,[dimids(3),dimids(5),dimids(6)],varid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','net primary productivity')
@@ -652,7 +660,7 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 !----
 ! Max_fpc
 
-ncstat = nf90_def_var(ofid,'fpc_max',nf90_double,dimids(3:4),varid)
+ncstat = nf90_def_var(ofid,'fpc_grid',nf90_double,[dimids(3),dimids(5),dimids(6)],varid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','maximum fpc plant functional type')
@@ -668,15 +676,33 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
-!forest fire danger meter Mk5
+! Max_fpc
 
-ncstat = nf90_def_var(ofid,'ForFireMk5',nf90_double,dimids(3:4),varid)
+ncstat = nf90_def_var(ofid,'treecover',nf90_double,[dimids(3),dimids(5)],varid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'long_name','Forest fire danger meter Mark 5')
+ncstat = nf90_put_att(ofid,varid,'long_name','treecover fraction')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_put_att(ofid,varid,'units','unit')
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+! Max_fpc
+
+ncstat = nf90_def_var(ofid,'grasscover',nf90_double,[dimids(3),dimids(5)],varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','grasscover fraction')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
@@ -688,17 +714,35 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 !----
 !forest fire danger meter Mk5
 
-ncstat = nf90_def_var(ofid,'sloperad',nf90_double,dimids(3:4),varid)
-if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_put_att(ofid,varid,'long_name','slope to flat direct beam radiation ratio')
-if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_put_att(ofid,varid,'units','ratio')
-if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
-if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+! ncstat = nf90_def_var(ofid,'ForFireMk5',nf90_double,dimids(3:4),varid)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_put_att(ofid,varid,'long_name','Forest fire danger meter Mark 5')
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_put_att(ofid,varid,'units','unit')
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
+! ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! !----
+! !forest fire danger meter Mk5
+!
+! ncstat = nf90_def_var(ofid,'sloperad',nf90_double,dimids(3:4),varid)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_put_att(ofid,varid,'long_name','slope to flat direct beam radiation ratio')
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_put_att(ofid,varid,'units','ratio')
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
@@ -711,8 +755,8 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 ncstat = nf90_enddef(ofid)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_close(ofid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+! ncstat = nf90_close(ofid)
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 write(0,*) 'Finished create outfile'
 write(0,*)
@@ -729,14 +773,15 @@ subroutine getoutfile_onelayer(info)
 ! For output such as final GPP at simulation year X etc.
 ! Leo O Lai (Feb 2021)
 
-use statevarsmod, only : startyr,calcyrs
+use mpivarsmod,   only : mpivars
+use pftparmod,    only : npft
 
 implicit none
 
-type(infompi), target, intent(in) :: info
+type(mpivars), target, intent(in) :: info
 
-character(100), pointer :: infile
-character(100), pointer :: outfile
+character(200), pointer :: infile
+character(200), pointer :: outfile
 integer(i4) ,   pointer :: validcell
 
 integer :: ifid
@@ -745,7 +790,7 @@ integer :: ncstat
 integer :: varid
 integer :: dimid
 
-integer, dimension(3) :: dimids
+integer, dimension(4) :: dimids
 
 integer :: xlen
 integer :: ylen
@@ -764,9 +809,9 @@ character(10) :: now
 
 !--------------------
 
-infile    => info%infile
+infile    => info%cfile_transient
 outfile   => info%outfile
-validcell => info%validcell
+validcell => info%ilen
 
 !--------------------
 
@@ -900,6 +945,29 @@ ncstat = nf90_put_var(ofid,varid,indx)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'long_name','index of lon and lat')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','1 to length')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',-1)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+!----
+! npft
+
+ncstat = nf90_def_dim(ofid,'pft',npft,dimid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+dimids(4) = dimid
+
+ncstat = nf90_def_var(ofid,'pft',nf90_int,dimid,varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,(/(i,i=1,npft,1)/))
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','pft number')
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_put_att(ofid,varid,'units','1 to length')
@@ -1402,6 +1470,20 @@ if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 ! ncstat = nf90_put_att(ofid,varid,'_FillValue',missing_sp)
 ! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
+!----
+! cover
+
+ncstat = nf90_def_var(ofid,'cover',nf90_double,dimids(3:4),varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'long_name','mean fpc_grid cover of pft')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'units','fraction')
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_att(ofid,varid,'missing_value',missing_sp)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 !----
 
@@ -1450,69 +1532,6 @@ ncstat = nf90_put_var(ofid,varid,lat)
 if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
 end subroutine putlonlat
-
-!-------------------------------------------------------------------------------------------------
-
-subroutine printgrid(info,grid,year,day)
-
-! Subroutine to print user-specified lon/lat (grid) from command line (Leo Lai Apr 2021)
-
-use statevarsmod, only : startyr,dayvars
-
-implicit none
-
-type(infompi), intent(in) :: info
-integer      , intent(in) :: grid
-integer      , intent(in) :: year
-integer      , intent(in) :: day
-
-
-if (year == 1 .AND. day == 1) then
-
-  print *,  'lon ', &
-            'lat ', &
-            'year ', &
-            'day ', &
-            'tmin ', &
-            'tmax ', &
-            'tmean ', &
-            'tday ', &
-            'tnight ', &
-            'tdew ', &
-            'prec ', &
-            'dayl ', &
-            'dsol ', &
-            'rhum ', &
-            'srad ', &
-            'dpet ', &
-            'vpd '
-
-end if
-
-
-! Print variables onto terminal
-print *,  info%plon, &
-          info%plat, &
-          startyr+year-1, &
-          day, &
-          dayvars(grid,day)%tmin, &
-          dayvars(grid,day)%tmax, &
-          dayvars(grid,day)%tmean, &
-          dayvars(grid,day)%tday, &
-          dayvars(grid,day)%tnight, &
-          dayvars(grid,day)%tdew, &
-          dayvars(grid,day)%prec, &
-          dayvars(grid,day)%dayl, &
-          dayvars(grid,day)%dsol, &
-          dayvars(grid,day)%rhum, &
-          dayvars(grid,day)%srad, &
-          dayvars(grid,day)%dpet, &
-          dayvars(grid,day)%vpd
-
-
-
-end subroutine printgrid
-
 
 !-------------------------------------------------------------------------------------------------
 

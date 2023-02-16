@@ -2,6 +2,20 @@ module gppmod
 
 ! Module to calculate GPP coded for ALVAR by Leo Lai (Aug 2021)
 
+use parametersmod, only : i2,i4,sp,dp,missing_i2,missing_sp,Tfreeze,daysec
+
+implicit none
+
+!---------------------------------------------------------------------
+!---------------------------------------------------------------------
+!---------------------------------------------------------------------
+
+contains
+
+!---------------------------------------------------------------------
+
+subroutine gpp(year,grid,day)
+
 ! Based on combined methods in:
 !     Haxeltine & Prentice (1996) BIOME3: An equilibrium terrestrial biosphere model based on ecophysiological constraints...  https://doi.org/10.1029/96GB02344
 !     Wang et al. (2017) Towards a universal model for carbon dioxide uptake by plants, Nature Plnats. DOI:10.1038/s41477-017-0006-8
@@ -18,82 +32,211 @@ module gppmod
 ! 3. Effective Michaelis–Menten coefficient of Rubisco
 !       Bernacchi et al. (2001) Improved temperature response functions for models of Rubisco-limited photosyn-thesis, Plant, Cell and Environment, 24, 253–259
 
-implicit none
+use utilitiesmod, only : getmonth
+use pftparmod, only : npft,pftpar,tree,raingreen,c4
+use statevarsmod, only : ndyear,dayvars,soilvars,gppvars,vegvars,topovars,gprint,lprint
+use waterbalancemod, only : waterbalanceLPJ,w
+use biome1mod,    only : biomevars
+use soilstatemod, only : dzmm,dz
 
-!---------------------------------------------------------------------
-!---------------------------------------------------------------------
-!---------------------------------------------------------------------
+integer(i4), intent(in) :: year
+integer(i4), intent(in) :: grid
+integer(i4), intent(in) :: day
 
-contains
+! Parameters
+real(dp), parameter :: R        = 8.314      ! Universal gas constant (J mol-1 K-1)
+real(dp), parameter :: phi0     = 1.02       ! Intrinsic quantum yield (g C mol-1) (Wang et al., 2017)
+real(dp), parameter :: beta     = 240.       ! Constant in eq.3 (Wang et al. 2017)
+real(dp), parameter :: beta_inv = 1./beta    ! Inverse of beta constant in eq.3 (Wang et al. 2017)
+real(dp), parameter :: cstar    = 0.41       ! Unit carbon cost for maintenance of electron transport capacity (unitless) (Wang et al. 2017)
+real(dp), parameter :: A        = -3.719     ! Constant in eq.13 for water viscosity (Wang et al. 2017)
+real(dp), parameter :: B        = 580.       ! Constant in eq.13 for water viscosity (Wang et al. 2017)
+real(dp), parameter :: C        = -138.      ! Constant in eq.13 for water viscosity (Wang et al. 2017)
+real(dp), parameter :: sr2par   = 0.45       ! Conversion factor from solar irridiance (W m-2) to photosynthetically active radiation (PAR; 400-700 um) (W m-2) (Meek et al., 1984)
+real(dp), parameter :: sr2ppfd  = 2.04       ! Conversion factor from solar irradiance (W m-2) to PPFD (umol m-2 s-1) (Meek et al., 1984)
+real(dp), parameter :: coef_T   = 0.0545     ! Coefficient for temperature in eq.1 (Wang et al. 2017)
+real(dp), parameter :: coef_D   = -0.5       ! Coefficient for vapor pressure deficit in eq.1 (Wang et al. 2017)
+real(dp), parameter :: coef_z   = -0.0815    ! Coefficient for elevation in eq.1 (Wang et al. 2017)
+real(dp), parameter :: intp_C   = 1.189      ! Intercept constant in eq.1 (Wang et al. 2017)
+real(dp), parameter :: dhc      = 79430.     ! Activation energy for Kc (J mol-1) in eq.16 (Wang et al. 2017) --> from Bernacchi et al. 2001
+real(dp), parameter :: dho      = 36380.     ! Activation energy for Ko (J mol-1) in eq.16 (Wang et al. 2017) --> from Bernacchi et al. 2001
+real(dp), parameter :: kc25     = 39.97      ! k25 parameter for Kc variable (Bernacchi et al. 2001)
+real(dp), parameter :: ko25     = 27480.     ! k25 parameter for Ko variable (Bernacchi et al. 2001)
 
-!---------------------------------------------------------------------
+!-------------------------
+! Pointer variables
+real(dp), pointer :: Ratm                 ! Relative atmospheric pressure to sea-level (fraction)
+real(dp), pointer :: Patm                 ! Atmospheric pressure to sea-level (Pa)
+real(dp), pointer :: vpd                  ! Average daytime saturation vapor pressure deficit (Pa)
+real(dp), pointer :: dayl                 ! Daylength (h)
+real(dp), pointer :: srad                 ! Downwelling surface shortwave radiation (kJ m-2 d-1)
+real(dp), pointer :: srad_dir             ! Direct beam downwelling shortwave raditaion (kJ m-2 d-1)
+real(dp), pointer :: srad_dif             ! Diffuse downwelling shortwave raditaion (kJ m-2 d-1)
+real(dp), pointer :: tmean                ! 24 hour mean temperature (degC)
+real(dp), pointer :: prec                 ! Daily precipitation (mm)
+real(dp), pointer :: dpet                 ! Daily potential evapotranspiration (mm d-1)
+real(dp), pointer :: daet
+real(dp), pointer :: alpha
 
-subroutine calcgpp_opt(day,dayl,srad,srad_dir,tmean,zsno,tree,raingreen,summergreen,c4,present,dwscal,fpc_grid,cellarea,areafrac, &
-                      leafon,leafondays,leafoffdays,dphen,dphen_t,dphen_w,dgp,rd,gpp0,gpp0_tot)
+logical,  pointer, dimension(:) :: present              ! PFT present
+real(dp), pointer, dimension(:) :: lambda               ! Actual ratio of lead internal to external CO2 (fraction)
+real(dp), pointer, dimension(:) :: gammastar            ! Photorespiratory compensation point (gammastar in Wang et al. 2017) (Pa)
+real(dp), pointer, dimension(:) :: gpp0                 ! Gross primary productivity under non-water stressed condition (g C m-2 d-1)
+real(dp), pointer, dimension(:) :: gpp1                 ! Gross primary productivity under actual condition (g C m-2 d-1)
+real(dp), pointer, dimension(:) :: gpp_tot              ! Total daily gross primary productivity (g C d-1)
+real(dp), pointer, dimension(:) :: rd                   ! Daily leaf respiration (gC m-2 d-1) >> whole day include day + night
+real(dp), pointer, dimension(:) :: dgp                  ! Optimal daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
+real(dp), pointer, dimension(:) :: dgc                  ! Actual daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
+real(dp), pointer, dimension(:) :: dwscal
 
-! Subroutine to calculate the optimal gpp based on optimal leaf internal to external CO2 ratio, under non-water stressed conditions
-! Based on method by Prentice & Haxeltine (1996), adapted from LPJ-LMFire
+real(dp), pointer, dimension(:) :: dphen
+real(dp), pointer, dimension(:) :: dphen_t
+real(dp), pointer, dimension(:) :: dphen_w
 
-use parametersmod, only : i4,sp,Tfreeze
-use pftparmod,     only : npft,pftpar
+logical,  pointer, dimension(:) :: leafon
+real(dp), pointer, dimension(:) :: leafondays
+real(dp), pointer, dimension(:) :: leafoffdays
 
-implicit none
+real(dp), pointer, dimension(:) :: fpc_grid
 
-integer(i4),              intent(in)    :: day
-real(sp),                 intent(in)    :: dayl           ! Daylength (h)
-real(sp),                 intent(in)    :: srad           ! Downwelling surface shortwave radiation (kJ m-2 d-1)
-real(sp),                 intent(in)    :: srad_dir       ! Direct beam downwelling shortwave raditaion (kJ m-2 d-1)
-real(sp),                 intent(in)    :: tmean          ! 24 hour mean temperature (degC)
-real(sp),                 intent(in)    :: zsno
-logical,  dimension(:),   intent(in)    :: tree
-logical,  dimension(:),   intent(in)    :: raingreen
-logical,  dimension(:),   intent(in)    :: summergreen
-logical,  dimension(:),   intent(in)    :: c4
-logical,  dimension(:),   intent(in)    :: present        ! PFT present
-real(sp), dimension(:,:), intent(in)    :: dwscal         ! Daily water stress factor (supply/demand ratio)
-real(sp), dimension(:),   intent(in)    :: fpc_grid       ! Foilage projective cover over grid (fraction)
-real(sp),                 intent(in)    :: cellarea       ! Area of gridcell (m2)
-real(sp),                 intent(in)    :: areafrac       ! Ground area fraction in gridcell (fraction)
-logical,  dimension(:),   intent(inout) :: leafon         ! Leaf phenology on/off for photosynthesis
-real(sp), dimension(:),   intent(inout) :: leafondays     ! Number of days since leaf phenology is on
-real(sp), dimension(:),   intent(inout) :: leafoffdays    ! Number of days since leaf phenology is off
-real(sp), dimension(:),   intent(inout) :: dphen          ! Phenology status of summergreen (proportion of leaf-on) (fraction)
-real(sp), dimension(:),   intent(inout) :: dphen_t        ! Temperature based phenology of summergreen (proportion of leaf-on) (fraction)
-real(sp), dimension(:),   intent(inout) :: dphen_w        ! Water based phenology of summergreen (proportion of leaf-on) (fraction)
-real(sp), dimension(:),   intent(inout) :: dgp            ! Optimal daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
-real(sp), dimension(:),   intent(inout) :: rd             ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
-real(sp), dimension(:),   intent(inout) :: gpp0           ! Gross primary productivity under non-water stressed condition (gC m-2 d-1)
-real(sp), dimension(:),   intent(inout) :: gpp0_tot       ! Total optimal daily gross primary productivity (gC d-1)
+real(dp), pointer :: elev                 ! Elevation (m)
+real(dp), pointer :: cellarea             ! Area of gridcell (m2)
+real(dp), pointer :: areafrac             ! Ground area fraction in gridcell (fraction)
 
 !-------------------------
 ! Local variables
-real(sp) :: tsecs       ! Time-step (sec)
-real(sp) :: ca          ! Optimal external (ambient) partial pressure of CO2 (Pa)
-real(sp) :: par         ! Photosynthetically active radiation (W m-2)
-real(sp) :: fpar        ! Fraciton of PAR intercepted by foliage (fraction)
-real(sp) :: gminp       ! Minimum canopy conductance rate (mm m-2 s-1)
-real(sp) :: lambdam     ! Optimal Ci/Ca ratio
-real(sp) :: inhibx1
-real(sp) :: inhibx2
-real(sp) :: inhibx3
-real(sp) :: inhibx4
-real(sp) :: adtmm0      ! Optimal total daytime net photosynthesis in mm (mm m-2 d-1)
-real(sp) :: agd0        ! Optimal daily gross photosynthesis (gC m-2 d-1)
-real(sp) :: minwscal
-real(sp) :: longevity
-real(sp) :: dwscal_ytd
+real(dp) :: tmean_K               ! Daily mean temperature (K)
 
-integer(i4) :: pft
+real(dp) :: xi                    ! Constant term in Wang et al. (2017) Eq. 27
+real(dp) :: ci                    ! Optimal lead internal partial pressure of CO2 (Pa)
+real(dp) :: ca                    ! Optimal external (ambient) partial pressure of CO2 (Pa)
+real(dp) :: pi
+real(dp) :: pa
+real(dp) :: Kmm                   ! Effective Michaelis–Menten coefficient of Rubisco (Pa)
+real(dp) :: Kc                    ! Michaelis constant for CO2 in eq.16 (Wang et al. 2017)
+real(dp) :: Ko                    ! Michaelis constant for O2 in eq.16 (Wang et al. 2017)
+real(dp) :: Po                    ! O2 partial pressure in eq.17 (Pa) (Wang et al. 2017)
+real(dp) :: visco                 ! Viscosity of water relative to 25C / 298.15K (fraction)
+real(dp) :: par                   ! Photosynthetically active radiation (W m-2)
+real(dp) :: fpar                  ! Fraciton of PAR intercepted by foliage (fraction)
+real(dp) :: apar                  ! Absorbed photosynthetically active radiation (W m-2)
+real(dp) :: ppfd                  ! Photosynthetic photo flux density (mol m-2 s-1)
+real(dp) :: fppfd                 ! Fraciton of PPFD intercepted by foliage (fraction)
+real(dp) :: appfd                 ! Absorbed (by leaf) photosynthetic photo flux density (mol m-2 s-1)
+real(dp) :: lambdam
+
+real(dp) :: rootprop              ! Root proportion in soil layer (fraction)
+real(dp) :: gminp                 ! Minimum canopy conductance rate (mm m-2 s-1)
+
+real(dp) :: tau
+real(dp) :: tsecs
+real(dp) :: supply                ! Supply of soil moisture (mm d-1)
+real(dp) :: demand                ! Demand for soil moisture (mm d-1)
+real(dp) :: vm0                   ! Optimal rubisco activity (gC m-2 d-1)
+real(dp) :: rd0                   ! Optimal leaf respiration rate (gC m-2 d-1)
+real(dp) :: and0                  ! Optimal daily net photosynthesis (gC m-2 d-1)
+real(dp) :: adt0                  ! Optimal total daytime net photosynthesis (gC m-2 d-1)
+real(dp) :: adtmm0                ! Optimal total daytime net photosynthesis in mm (mm m-2 d-1)
+real(dp) :: vm1                   ! Actual leaf rubisco activity (gC m-2 d-1)
+real(dp) :: adtmm1                ! Actual total daytime net photosynthesis in mm (mm m-2 d-1)
+real(dp) :: adtmm2
+real(dp) :: je                    ! APAR-limited photosynthesis rate (molC m-2 h-1)
+real(dp) :: jc                    ! Rubisco-activity-limited photosynthesis rate (molC m-2 h-1)
+real(dp) :: agd0
+real(dp) :: agd1
+
+!-------------------------
+! Temperature inhibition variables
+real(dp) :: inhibx1
+real(dp) :: inhibx2
+real(dp) :: inhibx3
+real(dp) :: inhibx4
+real(dp) :: k1
+real(dp) :: k2
+real(dp) :: k3
+real(dp) :: low
+real(dp) :: high
+real(dp) :: tstress
+
+! Rubisco capcity variables
+real(dp) :: c1
+real(dp) :: c2
+real(dp) :: b0
+real(dp) :: t0
+real(dp) :: s
+real(dp) :: sigma
+
+! Bisection root finding variables
+real(dp) :: gpd
+real(dp) :: epsilon
+real(dp) :: x1
+real(dp) :: x2
+real(dp) :: rtbis
+real(dp) :: dx
+real(dp) :: fmid
+real(dp) :: xmid
+
+real(dp) :: longevity
+real(dp) :: minwscal
+real(dp) :: dwscal_ytd
+real(dp) :: drunoff_surf
+real(dp) :: drunoff_drain
+
+integer :: pft
+integer :: it
+
+!-------------------------
+
+Ratm     => dayvars(grid,day)%Ratm
+Patm     => dayvars(grid,day)%Patm
+vpd      => dayvars(grid,day)%vpd
+dayl     => dayvars(grid,day)%dayl
+srad     => dayvars(grid,day)%srad
+srad_dir => dayvars(grid,day)%srad_dir
+srad_dif => dayvars(grid,day)%srad_dif
+tmean    => dayvars(grid,day)%tmean
+prec     => dayvars(grid,day)%prec
+dpet     => dayvars(grid,day)%dpet
+daet     => dayvars(grid,day)%daet
+alpha    => dayvars(grid,day)%alpha
+
+elev     => topovars(grid)%elev
+cellarea => topovars(grid)%cellarea
+areafrac => topovars(grid)%areafrac
+
+gammastar=> gppvars(grid,day)%gammastar
+lambda   => gppvars(grid,day)%lambda
+gpp0     => gppvars(grid,day)%gpp0
+gpp1     => gppvars(grid,day)%gpp
+gpp_tot  => gppvars(grid,day)%gpp_tot
+rd       => gppvars(grid,day)%rd
+dgp      => gppvars(grid,day)%dgp
+dgc      => gppvars(grid,day)%dgc
+dwscal   => gppvars(grid,day)%dwscal
+
+present  => vegvars(grid)%present
+dphen    => vegvars(grid)%dphen(day,:)
+dphen_t  => vegvars(grid)%dphen_t(day,:)
+dphen_w  => vegvars(grid)%dphen_w(day,:)
+
+leafon      => vegvars(grid)%leafon
+leafondays  => vegvars(grid)%leafondays
+leafoffdays => vegvars(grid)%leafoffdays
+
+fpc_grid => vegvars(grid)%fpc_grid
 
 !-------------------------
 
 if (areafrac <= 0.) then
-  gpp0 = -9999.
-  gpp0_tot = 0.
+  gpp1 = -9999.
+  gpp_tot = 0.
   return
 end if
 
-! if (areafrac < 0.) areafrac = 0.
+tmean_K = tmean + Tfreeze
+
+if (elev < 0.) elev = 0.
+if (areafrac < 0.) areafrac = 0.
 
 !-------------------------
 
@@ -111,13 +254,13 @@ do pft = 1, npft
 
     !------
 
-    inhibx1 = pftpar%inhibx1(pft)
-    inhibx2 = pftpar%inhibx2(pft)
-    inhibx3 = pftpar%inhibx3(pft)
-    inhibx4 = pftpar%inhibx4(pft)
+    inhibx1 = pftpar(22,pft)
+    inhibx2 = pftpar(23,pft)
+    inhibx3 = pftpar(24,pft)
+    inhibx4 = pftpar(25,pft)
 
-    gminp   = pftpar%gminp(pft) * fpc_grid(pft)
-    lambdam = pftpar%lambdam(pft)
+    gminp   = pftpar(4,pft) * fpc_grid(pft)
+    lambdam = pftpar(26,pft)
 
     !------
 
@@ -134,8 +277,6 @@ do pft = 1, npft
     ! Save optimal gpp value to statevars
     gpp0(pft) = agd0
 
-    gpp0_tot(pft) = gpp0(pft) * cellarea * areafrac
-
   end if
 
 end do
@@ -148,77 +289,27 @@ do pft = 1, npft
 
   if (present(pft)) then
 
-    minwscal  = pftpar%minwscal(pft)
-    longevity = pftpar%longevity(pft)
+    minwscal  = pftpar(3,pft)
+    longevity = pftpar(7,pft)
 
     if (day == 1) then
-      dwscal_ytd = dwscal(365,pft)
+      dwscal_ytd = gppvars(grid,365)%dwscal(pft)
     else
-      dwscal_ytd = dwscal(day-1,pft)
+      dwscal_ytd = gppvars(grid,day-1)%dwscal(pft)
     end if
 
     !------
-    ! Drought phenology and net phenology for today. Drought deciduous PFTs shed their leaves
-    ! when their water scalar falls below the PFT specific minimum value (minwscal).
-    ! Leaves are replaced immediately (i.e., daily) once the minimum water scalar is exceeded.
-    ! New modifications by Leo O Lai (Jan 2023) for better seperation of leafon/off for summergreen PFTs
 
-    if (dwscal_ytd > minwscal) then
-      dphen_w(pft)     = 1.
-      ! dphen(pft)       = dphen_t(pft)
-      ! leafondays(pft)  = leafondays(pft) + 1
+    if (dwscal_ytd > minwscal .and. leafon(pft)) then
+
+      dphen_w(pft) = 1.
+      dphen(pft) = dphen_t(pft)
+      leafondays(pft) = leafondays(pft) + 1
+
     else
+
       dphen_w(pft) = 0.
-      ! dphen(pft)   = 0.
-    end if
-
-    !------
-
-    dphen(pft) = dphen_w(pft) * dphen_t(pft)
-
-    if (.not.tree(pft)) then
-      if (tmean <= -5. .or. zsno >= 0.01) dphen(pft) = 0.
-    end if
-
-    if (dphen(pft) > 0.) leafondays(pft) = leafondays(pft) + 1
-
-    !------
-
-    if (summergreen(pft)) then
-
-      if (dphen_t(pft) <= 0.) then
-
-        leafon(pft)      = .false.
-        leafoffdays(pft) = leafoffdays(pft) + 1
-
-        if (leafoffdays(pft) == 1) leafondays(pft) = 0
-
-      else if (dphen_t(pft) > 0.) then
-
-        leafon(pft)      = .true.
-        leafoffdays(pft) = 0
-
-      end if
-
-    end if
-
-    !------
-
-    if (.not.tree(pft)) then
-
-      if (dphen(pft) <= 0.) then
-
-        leafon(pft)      = .false.
-        leafoffdays(pft) = leafoffdays(pft) + 1
-
-        if (leafoffdays(pft) == 1) leafondays(pft) = 0
-
-      else if (dphen(pft) > 0.) then
-
-        leafon(pft)      = .true.
-        leafoffdays(pft) = 0
-
-      end if
+      dphen(pft) = 0.
 
     end if
 
@@ -242,96 +333,36 @@ do pft = 1, npft
 
         end if
 
-        if (.not.leafon(pft)) dphen(pft) = 0.
-
       end if
 
-      !---
+      !------
 
-  end if ! PRESENT loop
+  end if
 
-end do ! PFT loop
+end do
 
+!------
+! Update current day soilwater balance based on precipitation and soil properties
+! NOTE: Currently in LPJ-LMFire method, where all related soil variables are self-contained in waterbalancemod.f90
+!       Preferably switch to the 6 layer soil model coded in hydrologymod.f90 some time soon
+call waterbalanceLPJ(grid,day,present,dgp,dpet,dphen,dgc,prec,drunoff_drain,drunoff_surf,dwscal,daet,fpc_grid)
 
-end subroutine calcgpp_opt
-
-!---------------------------------------------------------------------
-
-subroutine calcgpp(day,dayl,srad,srad_dir,tmean,c4,present,fpc_grid,cellarea,areafrac,dgc,lambda,rd,gpp,gpp_tot)
-
-! Subroutine to calculate the actual gpp based on optimal leaf internal to external CO2 ratio, under non-water stressed conditions
-! Based on method by Prentice & Haxeltine (1996), adapted from LPJ-LMFire
-
-use parametersmod, only : i4,sp
-use pftparmod,     only : npft,pftpar
-
-implicit none
-
-integer(i4),              intent(in)    :: day
-real(sp),                 intent(in)    :: dayl           ! Daylength (h)
-real(sp),                 intent(in)    :: srad           ! Downwelling surface shortwave radiation (kJ m-2 d-1)
-real(sp),                 intent(in)    :: srad_dir       ! Direct beam downwelling shortwave raditaion (kJ m-2 d-1)
-real(sp),                 intent(in)    :: tmean          ! 24 hour mean temperature (degC)
-logical,  dimension(:),   intent(in)    :: c4
-logical,  dimension(:),   intent(in)    :: present        ! PFT present
-real(sp), dimension(:),   intent(in)    :: fpc_grid       ! Foilage projective cover over grid (fraction)
-real(sp),                 intent(in)    :: cellarea       ! Area of gridcell (m2)
-real(sp),                 intent(in)    :: areafrac       ! Ground area fraction in gridcell (fraction)
-real(sp), dimension(:),   intent(in)    :: dgc            ! Actual canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
-real(sp), dimension(:),   intent(inout) :: lambda         ! Actual leaf internal / external CO2 partial pressure ratio (fraction)
-real(sp), dimension(:),   intent(inout) :: rd             ! Daily leaf respiration (gC m-2 day-1) >> whole day include day + night
-real(sp), dimension(:),   intent(inout) :: gpp            ! Gross primary productivity under actual conditions (gC m-2 d-1)
-real(sp), dimension(:),   intent(inout) :: gpp_tot        ! Total daily gross primary productivity (gC d-1)
-
-!-------------------------
-! Local variables
-real(sp) :: tsecs       ! Time-step (sec)
-real(sp) :: ca          ! Optimal external (ambient) partial pressure of CO2 (Pa)
-real(sp) :: par         ! Photosynthetically active radiation (W m-2)
-real(sp) :: fpar        ! Fraciton of PAR intercepted by foliage (fraction)
-real(sp) :: gminp       ! Minimum canopy conductance rate (mm m-2 s-1)
-real(sp) :: lambdam     ! Optimal Ci/Ca ratio
-real(sp) :: inhibx1
-real(sp) :: inhibx2
-real(sp) :: inhibx3
-real(sp) :: inhibx4
-real(sp) :: adtmm1      ! Actual total daytime net photosynthesis in mm (mm m-2 d-1)
-real(sp) :: adtmm2
-real(sp) :: agd1
-
-!-------------------------
-! Bisection root finding variables
-real(sp) :: gpd         ! Actual canopy conductance (mm m-2 d-1)
-real(sp) :: epsilon
-real(sp) :: x1
-real(sp) :: x2
-real(sp) :: rtbis
-real(sp) :: dx
-real(sp) :: fmid
-real(sp) :: xmid
-
-integer(i4) :: pft
-integer(i4) :: it
 
 !---------------------------------------------------------------------
 ! Calculate photosynthesis in water stressed condition by considering actual canopy conductance (gpd)
-ca    = 4.00e-4
-par   = srad * 1000. * 0.5
-tsecs = 3600. * dayl
-
 do pft = 1, npft
 
   if (present(pft)) then
 
     !------
 
-    inhibx1 = pftpar%inhibx1(pft)
-    inhibx2 = pftpar%inhibx2(pft)
-    inhibx3 = pftpar%inhibx3(pft)
-    inhibx4 = pftpar%inhibx4(pft)
+    inhibx1 = pftpar(22,pft)
+    inhibx2 = pftpar(23,pft)
+    inhibx3 = pftpar(24,pft)
+    inhibx4 = pftpar(25,pft)
 
-    gminp   = pftpar%gminp(pft) * fpc_grid(pft)
-    lambdam = pftpar%lambdam(pft)
+    gminp   = pftpar(4,pft) * fpc_grid(pft)
+    lambdam = pftpar(26,pft)
 
     !------
 
@@ -386,7 +417,7 @@ do pft = 1, npft
         if (abs(fmid) < epsilon) exit
 
         if (it > 10) then
-          write(0,*) 'No photosynthesis solution for pft: ', pft, it
+          if (lprint .and. grid==gprint .and. pft==1) write(0,*) 'No photosynthesis solution for pft: ', pft, it
           exit
         end if
 
@@ -394,34 +425,36 @@ do pft = 1, npft
 
     else  ! Infinitesimal canopy conductance
 
-      rd(pft) = 0.
-      agd1    = 0.
-      xmid    = 0.
+      rd(pft)   = 0.
+      agd1  = 0.
+      xmid = 0.
 
     end if  ! Canopy conductance IF condition
 
     !---------------------------------------------------------------------
     ! Save values into state variables
-    gpp(pft)    = agd1
+    ! gpp0(pft)   = agd0
+    gpp1(pft)   = agd1
     lambda(pft) = xmid
-    ! alpha       = min(daet/dpet, 1.)
+    alpha       = min(daet/dpet, 1.)
 
-    gpp_tot(pft) = gpp(pft) * cellarea * areafrac
+    gpp_tot(pft) = gpp1(pft) * cellarea * areafrac
 
   else
 
-    gpp(pft)   = 0.
+    gpp0(pft)   = 0.
+    gpp1(pft)   = 0.
     lambda(pft) = 0.
-    ! alpha       = min(daet/dpet, 1.)
+    alpha       = min(daet/dpet, 1.)
 
-    gpp_tot(pft) = gpp(pft) * cellarea * areafrac
+    gpp_tot(pft) = gpp1(pft) * cellarea * areafrac
 
   end if ! Present IF condition
 
 end do ! PFT loop
 
 
-end subroutine calcgpp
+end subroutine gpp
 
 !---------------------------------------------------------------------
 
@@ -433,79 +466,79 @@ use pftparmod,     only : npft,pftpar
 implicit none
 
 ! Parameters copied from LPJ-LMFire (photosynthesismod)
-real(sp), parameter :: alphaa    =    0.5     ! fraction of PAR assimilated at ecosystem level
-real(sp), parameter :: alphac3   =    0.08    ! intrinsic quantum efficiency of CO2 uptake in C3 plants
-real(sp), parameter :: alphac4   =    0.053   ! C4 intrinsic quantum efficiency
-real(sp), parameter :: bc3       =    0.015   ! leaf respiration as fraction of Vmax for C3 plants
-real(sp), parameter :: bc4       =    0.02    ! leaf respiration as fraction of vmax for C4 plants
-real(sp), parameter :: cmass     =   12.      ! atomic mass of carbon
-real(sp), parameter :: cq        =    4.6e-6  ! conversion factor for solar radiation at 550 nm from J/m2 to E/m2 (E=mol quanta)
-real(sp), parameter :: e0        =  308.56    ! parameter in Arrhenius temp response function
-real(sp), parameter :: kc25      =   30.      ! value of kc at 25 deg C
-real(sp), parameter :: ko25      =    3.e4    ! value of ko at 25 deg C
-real(sp), parameter :: lambdamc3 =    0.8     ! optimal (maximum?) ci:ca ratio for C3 plants
-real(sp), parameter :: lambdamc4 =    0.4     ! optimal ci:ca ratio for c4 plantsfpc_gr
-real(sp), parameter :: m         =   25.      ! corresponds to parameter p in Eqn 28, Haxeltine & Prentice 1996
-real(sp), parameter :: n0        =    7.15    ! leaf N concentration (mg/g) not involved in photosynthesis
-real(sp), parameter :: p         =    1.e5    ! atmospheric pressure (Pa)
-real(sp), parameter :: po2       =   20.9e3   ! O2 partial pressure (Pa)
-real(sp), parameter :: q10kc     =    2.1     ! q10 for temperature-sensitive parameter kc
-real(sp), parameter :: q10ko     =    1.2     ! q10 for temperature-sensitive parameter ko
-real(sp), parameter :: q10tau    =    0.57    ! q10 for temperature-sensitive parameter tau
-real(sp), parameter :: t0c3      =  250.      ! base temperature (K) in Arrhenius temperature response function for C3 plants
-real(sp), parameter :: t0c4      =  260.      ! base temperature in Arrhenius func for C4 plants
-real(sp), parameter :: tau25     = 2600.      ! value of tau at 25 deg C
-real(sp), parameter :: theta     =    0.7     ! colimitation (shape) parameter
-real(sp), parameter :: tk25      =  298.15    ! 25 deg C in Kelvin
-real(sp), parameter :: tmc3      =   45.      ! maximum temperature for C3 photosynthesis
-real(sp), parameter :: tmc4      =   55.      ! maximum temperature for C4 photosynthesis
+real(dp), parameter :: alphaa    =    0.5     ! fraction of PAR assimilated at ecosystem level
+real(dp), parameter :: alphac3   =    0.08    ! intrinsic quantum efficiency of CO2 uptake in C3 plants
+real(dp), parameter :: alphac4   =    0.053   ! C4 intrinsic quantum efficiency
+real(dp), parameter :: bc3       =    0.015   ! leaf respiration as fraction of Vmax for C3 plants
+real(dp), parameter :: bc4       =    0.02    ! leaf respiration as fraction of vmax for C4 plants
+real(dp), parameter :: cmass     =   12.      ! atomic mass of carbon
+real(dp), parameter :: cq        =    4.6e-6  ! conversion factor for solar radiation at 550 nm from J/m2 to E/m2 (E=mol quanta)
+real(dp), parameter :: e0        =  308.56    ! parameter in Arrhenius temp response function
+real(dp), parameter :: kc25      =   30.      ! value of kc at 25 deg C
+real(dp), parameter :: ko25      =    3.e4    ! value of ko at 25 deg C
+real(dp), parameter :: lambdamc3 =    0.8     ! optimal (maximum?) ci:ca ratio for C3 plants
+real(dp), parameter :: lambdamc4 =    0.4     ! optimal ci:ca ratio for c4 plantsfpc_gr
+real(dp), parameter :: m         =   25.      ! corresponds to parameter p in Eqn 28, Haxeltine & Prentice 1996
+real(dp), parameter :: n0        =    7.15    ! leaf N concentration (mg/g) not involved in photosynthesis
+real(dp), parameter :: p         =    1.e5    ! atmospheric pressure (Pa)
+real(dp), parameter :: po2       =   20.9e3   ! O2 partial pressure (Pa)
+real(dp), parameter :: q10kc     =    2.1     ! q10 for temperature-sensitive parameter kc
+real(dp), parameter :: q10ko     =    1.2     ! q10 for temperature-sensitive parameter ko
+real(dp), parameter :: q10tau    =    0.57    ! q10 for temperature-sensitive parameter tau
+real(dp), parameter :: t0c3      =  250.      ! base temperature (K) in Arrhenius temperature response function for C3 plants
+real(dp), parameter :: t0c4      =  260.      ! base temperature in Arrhenius func for C4 plants
+real(dp), parameter :: tau25     = 2600.      ! value of tau at 25 deg C
+real(dp), parameter :: theta     =    0.7     ! colimitation (shape) parameter
+real(dp), parameter :: tk25      =  298.15    ! 25 deg C in Kelvin
+real(dp), parameter :: tmc3      =   45.      ! maximum temperature for C3 photosynthesis
+real(dp), parameter :: tmc4      =   55.      ! maximum temperature for C4 photosynthesis
 
 ! Subroutine arguments
 ! logical,  intent(in)  :: c4
 ! integer,  intent(in)  :: pfti
 integer,  intent(in)  :: pft
-real(sp), intent(in)  :: ca
-real(sp), intent(in)  :: dayl
-real(sp), intent(in)  :: fpar
-real(sp), intent(in)  :: lambda
+real(dp), intent(in)  :: ca
+real(dp), intent(in)  :: dayl
+real(dp), intent(in)  :: fpar
+real(dp), intent(in)  :: lambda
 logical,  intent(in)  :: c4
-real(sp), intent(in)  :: par
-real(sp), intent(in)  :: temp
-real(sp), intent(in)  :: x1
-real(sp), intent(in)  :: x2
-real(sp), intent(in)  :: x3
-real(sp), intent(in)  :: x4
-real(sp), intent(out) :: adtmm
-real(sp), intent(out) :: agd
-real(sp), intent(out) :: rd
+real(dp), intent(in)  :: par
+real(dp), intent(in)  :: temp
+real(dp), intent(in)  :: x1
+real(dp), intent(in)  :: x2
+real(dp), intent(in)  :: x3
+real(dp), intent(in)  :: x4
+real(dp), intent(out) :: adtmm
+real(dp), intent(out) :: agd
+real(dp), intent(out) :: rd
 
 ! Local variables
-real(sp) :: adt
-real(sp) :: and
-real(sp) :: apar
-real(sp) :: b
-real(sp) :: c1
-real(sp) :: c2
-real(sp) :: gammastar
-real(sp) :: high
-real(sp) :: je                    ! APAR-limited photosynthesis rate (molC m-2 h-1)
-real(sp) :: jc                    ! Rubisco-activity-limited photosynthesis rate (molC m-2 h-1)
-real(sp) :: k1
-real(sp) :: k2
-real(sp) :: k3
-real(sp) :: kc
-real(sp) :: ko
-real(sp) :: lambdam
-real(sp) :: low
-real(sp) :: pa
-real(sp) :: phipi
-real(sp) :: pi
-real(sp) :: s
-real(sp) :: sigma
-real(sp) :: t0
-real(sp) :: tau
-real(sp) :: tstress
-real(sp) :: vm
+real(dp) :: adt
+real(dp) :: and
+real(dp) :: apar
+real(dp) :: b
+real(dp) :: c1
+real(dp) :: c2
+real(dp) :: gammastar
+real(dp) :: high
+real(dp) :: jc
+real(dp) :: je
+real(dp) :: k1
+real(dp) :: k2
+real(dp) :: k3
+real(dp) :: kc
+real(dp) :: ko
+real(dp) :: lambdam
+real(dp) :: low
+real(dp) :: pa
+real(dp) :: phipi
+real(dp) :: pi
+real(dp) :: s
+real(dp) :: sigma
+real(dp) :: t0
+real(dp) :: tau
+real(dp) :: tstress
+real(dp) :: vm
 
 !-------------------------
 ! Return withtou perfomring calculations if daylength is too short
@@ -526,7 +559,7 @@ end if
 
 apar = par * fpar * alphaa
 
-lambdam = pftpar%lambdam(pft) ! Get optimal Ci/Ca ratio for PFT
+lambdam = pftpar(26,pft) ! Get optimal Ci/Ca ratio for PFT
 
 !-------------------------
 ! Calculate temperature inhibition function on photosynthesis
@@ -684,7 +717,7 @@ end subroutine photosynthesis
 ! integer(i4), intent(in) :: grid
 ! integer(i4), intent(in) :: day
 !
-! real(sp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+! real(dp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
 !                                               ,0.012    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
 !                                               ,0.030    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
 !                                               ,0.012    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
@@ -702,7 +735,7 @@ end subroutine photosynthesis
 !                                               ,0.000    &       ! 16 = Cold desert
 !                                               ,0.000    ]       ! 17 = Barren
 !
-! real(sp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+! real(dp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
 !                                               ,0.0015    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
 !                                               ,0.0040    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
 !                                               ,0.0015    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
@@ -721,9 +754,9 @@ end subroutine photosynthesis
 !                                               ,0.0000    ]       ! 17 = Barren
 !
 ! integer(i4), pointer :: biome
-! real(sp), pointer :: C_leaf
-! real(sp), pointer :: sla
-! real(sp), pointer :: lai
+! real(dp), pointer :: C_leaf
+! real(dp), pointer :: sla
+! real(dp), pointer :: lai
 !
 ! !-------------------------
 !
@@ -755,7 +788,7 @@ end subroutine photosynthesis
 ! integer(i4), intent(in) :: grid
 ! integer(i4), intent(in) :: day
 !
-! real(sp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+! real(dp), parameter, dimension(17) :: sla0 = [0.012    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
 !                                               ,0.012    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
 !                                               ,0.030    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
 !                                               ,0.012    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
@@ -773,7 +806,7 @@ end subroutine photosynthesis
 !                                               ,0.000    &       ! 16 = Cold desert
 !                                               ,0.000    ]       ! 17 = Barren
 !
-! real(sp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
+! real(dp), parameter, dimension(17) :: m    = [0.0015    &       ! 1 = Tropical evergreen / Broadlead evergreen tree (tropical)
 !                                               ,0.0015    &       ! 2 = Tropical raingreen / Broadleaf evergreen tree (tropical)
 !                                               ,0.0040    &       ! 3 = Tropical deciduous / Broadleaf deciduous tree (tropical)
 !                                               ,0.0015    &       ! 4 = Temperate evergreen (warm mixed) / Broadleaf evergreen tree (temperate)
@@ -792,14 +825,14 @@ end subroutine photosynthesis
 !                                               ,0.0000    ]       ! 17 = Barren
 !
 ! integer(i4), pointer :: biome
-! real(sp), pointer :: C_leaf
-! real(sp), pointer :: sla
-! real(sp), pointer :: lai0
+! real(dp), pointer :: C_leaf
+! real(dp), pointer :: sla
+! real(dp), pointer :: lai0
 !
-! real(sp) :: lai_sun
-! real(sp) :: lai_sha
+! real(dp) :: lai_sun
+! real(dp) :: lai_sha
 !
-! real(sp), parameter :: kb = 0.5       ! Extinction factors, should be function of zenith angle and leaf angle, but constant FOR NOW (Dai et al., 2004)
+! real(dp), parameter :: kb = 0.5       ! Extinction factors, should be function of zenith angle and leaf angle, but constant FOR NOW (Dai et al., 2004)
 !
 !
 ! !-------------------------
@@ -854,157 +887,157 @@ end subroutine photosynthesis
 ! integer(i4), intent(in) :: day
 !
 ! ! Parameters
-! real(sp), parameter :: R        = 8.314      ! Universal gas constant (J mol-1 K-1)
-! real(sp), parameter :: phi0     = 1.02       ! Intrinsic quantum yield (g C mol-1) (Wang et al., 2017)
-! real(sp), parameter :: beta     = 240.       ! Constant in eq.3 (Wang et al. 2017)
-! real(sp), parameter :: beta_inv = 1./beta    ! Inverse of beta constant in eq.3 (Wang et al. 2017)
-! real(sp), parameter :: cstar    = 0.41       ! Unit carbon cost for maintenance of electron transport capacity (unitless) (Wang et al. 2017)
-! real(sp), parameter :: A        = -3.719     ! Constant in eq.13 for water viscosity (Wang et al. 2017)
-! real(sp), parameter :: B        = 580.       ! Constant in eq.13 for water viscosity (Wang et al. 2017)
-! real(sp), parameter :: C        = -138.      ! Constant in eq.13 for water viscosity (Wang et al. 2017)
-! real(sp), parameter :: sr2par   = 0.45       ! Conversion factor from solar irridiance (W m-2) to photosynthetically active radiation (PAR; 400-700 um) (W m-2) (Meek et al., 1984)
-! real(sp), parameter :: sr2ppfd  = 2.04       ! Conversion factor from solar irradiance (W m-2) to PPFD (umol m-2 s-1) (Meek et al., 1984)
-! real(sp), parameter :: coef_T   = 0.0545     ! Coefficient for temperature in eq.1 (Wang et al. 2017)
-! real(sp), parameter :: coef_D   = -0.5       ! Coefficient for vapor pressure deficit in eq.1 (Wang et al. 2017)
-! real(sp), parameter :: coef_z   = -0.0815    ! Coefficient for elevation in eq.1 (Wang et al. 2017)
-! real(sp), parameter :: intp_C   = 1.189      ! Intercept constant in eq.1 (Wang et al. 2017)
-! real(sp), parameter :: dhc      = 79430.     ! Activation energy for Kc (J mol-1) in eq.16 (Wang et al. 2017) --> from Bernacchi et al. 2001
-! real(sp), parameter :: dho      = 36380.     ! Activation energy for Ko (J mol-1) in eq.16 (Wang et al. 2017) --> from Bernacchi et al. 2001
-! real(sp), parameter :: kc25     = 39.97      ! k25 parameter for Kc variable (Bernacchi et al. 2001)
-! real(sp), parameter :: ko25     = 27480.     ! k25 parameter for Ko variable (Bernacchi et al. 2001)
+! real(dp), parameter :: R        = 8.314      ! Universal gas constant (J mol-1 K-1)
+! real(dp), parameter :: phi0     = 1.02       ! Intrinsic quantum yield (g C mol-1) (Wang et al., 2017)
+! real(dp), parameter :: beta     = 240.       ! Constant in eq.3 (Wang et al. 2017)
+! real(dp), parameter :: beta_inv = 1./beta    ! Inverse of beta constant in eq.3 (Wang et al. 2017)
+! real(dp), parameter :: cstar    = 0.41       ! Unit carbon cost for maintenance of electron transport capacity (unitless) (Wang et al. 2017)
+! real(dp), parameter :: A        = -3.719     ! Constant in eq.13 for water viscosity (Wang et al. 2017)
+! real(dp), parameter :: B        = 580.       ! Constant in eq.13 for water viscosity (Wang et al. 2017)
+! real(dp), parameter :: C        = -138.      ! Constant in eq.13 for water viscosity (Wang et al. 2017)
+! real(dp), parameter :: sr2par   = 0.45       ! Conversion factor from solar irridiance (W m-2) to photosynthetically active radiation (PAR; 400-700 um) (W m-2) (Meek et al., 1984)
+! real(dp), parameter :: sr2ppfd  = 2.04       ! Conversion factor from solar irradiance (W m-2) to PPFD (umol m-2 s-1) (Meek et al., 1984)
+! real(dp), parameter :: coef_T   = 0.0545     ! Coefficient for temperature in eq.1 (Wang et al. 2017)
+! real(dp), parameter :: coef_D   = -0.5       ! Coefficient for vapor pressure deficit in eq.1 (Wang et al. 2017)
+! real(dp), parameter :: coef_z   = -0.0815    ! Coefficient for elevation in eq.1 (Wang et al. 2017)
+! real(dp), parameter :: intp_C   = 1.189      ! Intercept constant in eq.1 (Wang et al. 2017)
+! real(dp), parameter :: dhc      = 79430.     ! Activation energy for Kc (J mol-1) in eq.16 (Wang et al. 2017) --> from Bernacchi et al. 2001
+! real(dp), parameter :: dho      = 36380.     ! Activation energy for Ko (J mol-1) in eq.16 (Wang et al. 2017) --> from Bernacchi et al. 2001
+! real(dp), parameter :: kc25     = 39.97      ! k25 parameter for Kc variable (Bernacchi et al. 2001)
+! real(dp), parameter :: ko25     = 27480.     ! k25 parameter for Ko variable (Bernacchi et al. 2001)
 !
 ! ! Parameters copied rom LPJ-LMFire (gppmod and photosynthesismod)
-! real(sp), parameter :: alphaa    =    0.5     ! Fraction of PAR assimilated at ecosystem level
-! real(sp), parameter :: alphac3   =    0.08    ! intrinsic quantum efficiency of CO2 uptake in C3 plants
-! real(sp), parameter :: alphac4   =    0.053   ! C4 intrinsic quantum efficiency
-! real(sp), parameter :: bc3       =    0.015   ! leaf respiration as fraction of Vmax for C3 plants
-! real(sp), parameter :: bc4       =    0.02    ! leaf respiration as fraction of vmax for C4 plants
-! real(sp), parameter :: cmass     =   12.      ! atomic mass of carbon
-! real(sp), parameter :: cq        =    4.6e-6  ! conversion factor for solar radiation at 550 nm from J/m2 to E/m2 (E=mol quanta)
-! real(sp), parameter :: e0        =  308.56    ! parameter in Arrhenius temp response function
-! real(sp), parameter :: lambdamc3 =    0.8     ! optimal (maximum?) ci:ca ratio for C3 plants
-! real(sp), parameter :: lambdamc4 =    0.4     ! optimal ci:ca ratio for c4 plantsfpc_gr
-! real(sp), parameter :: n0        =    7.15    ! leaf N concentration (mg/g) not involved in photosynthesis
-! real(sp), parameter :: P         =    1.e5    ! atmospheric pressure (Pa)
-! real(sp), parameter :: po2       =   20.9e3   ! O2 partial pressure (Pa)
-! real(sp), parameter :: q10kc     =    2.1     ! q10 for temperature-sensitive parameter kc
-! real(sp), parameter :: q10ko     =    1.2     ! q10 for temperature-sensitive parameter ko
-! real(sp), parameter :: q10tau    =    0.57    ! q10 for temperature-sensitive parameter tau
-! real(sp), parameter :: t0c3      =  250.      ! base temperature (K) in Arrhenius temperature response function for C3 plants
-! real(sp), parameter :: t0c4      =  260.      ! base temperature in Arrhenius func for C4 plants
-! real(sp), parameter :: tau25     = 2600.      ! value of tau at 25 deg C
-! real(sp), parameter :: theta     =    0.7     ! colimitation (shape) parameter
-! real(sp), parameter :: tk25      =  298.15    ! 25 deg C in Kelvin
-! real(sp), parameter :: tmc3      =   45.      ! maximum temperature for C3 photosynthesis
-! real(sp), parameter :: tmc4      =   55.      ! maximum temperature for C4 photosynthesis
+! real(dp), parameter :: alphaa    =    0.5     ! Fraction of PAR assimilated at ecosystem level
+! real(dp), parameter :: alphac3   =    0.08    ! intrinsic quantum efficiency of CO2 uptake in C3 plants
+! real(dp), parameter :: alphac4   =    0.053   ! C4 intrinsic quantum efficiency
+! real(dp), parameter :: bc3       =    0.015   ! leaf respiration as fraction of Vmax for C3 plants
+! real(dp), parameter :: bc4       =    0.02    ! leaf respiration as fraction of vmax for C4 plants
+! real(dp), parameter :: cmass     =   12.      ! atomic mass of carbon
+! real(dp), parameter :: cq        =    4.6e-6  ! conversion factor for solar radiation at 550 nm from J/m2 to E/m2 (E=mol quanta)
+! real(dp), parameter :: e0        =  308.56    ! parameter in Arrhenius temp response function
+! real(dp), parameter :: lambdamc3 =    0.8     ! optimal (maximum?) ci:ca ratio for C3 plants
+! real(dp), parameter :: lambdamc4 =    0.4     ! optimal ci:ca ratio for c4 plantsfpc_gr
+! real(dp), parameter :: n0        =    7.15    ! leaf N concentration (mg/g) not involved in photosynthesis
+! real(dp), parameter :: P         =    1.e5    ! atmospheric pressure (Pa)
+! real(dp), parameter :: po2       =   20.9e3   ! O2 partial pressure (Pa)
+! real(dp), parameter :: q10kc     =    2.1     ! q10 for temperature-sensitive parameter kc
+! real(dp), parameter :: q10ko     =    1.2     ! q10 for temperature-sensitive parameter ko
+! real(dp), parameter :: q10tau    =    0.57    ! q10 for temperature-sensitive parameter tau
+! real(dp), parameter :: t0c3      =  250.      ! base temperature (K) in Arrhenius temperature response function for C3 plants
+! real(dp), parameter :: t0c4      =  260.      ! base temperature in Arrhenius func for C4 plants
+! real(dp), parameter :: tau25     = 2600.      ! value of tau at 25 deg C
+! real(dp), parameter :: theta     =    0.7     ! colimitation (shape) parameter
+! real(dp), parameter :: tk25      =  298.15    ! 25 deg C in Kelvin
+! real(dp), parameter :: tmc3      =   45.      ! maximum temperature for C3 photosynthesis
+! real(dp), parameter :: tmc4      =   55.      ! maximum temperature for C4 photosynthesis
 !
 ! !-------------------------
 ! ! Pointer variables
-! real(sp), pointer :: Ratm                 ! Relative atmospheric pressure to sea-level (fraction)
-! real(sp), pointer :: Patm                 ! Atmospheric pressure to sea-level (Pa)
-! real(sp), pointer :: vpd                  ! Average daytime saturation vapor pressure deficit (Pa)
-! real(sp), pointer :: dayl                 ! Daylength (h)
-! real(sp), pointer :: srad                 ! Downwelling surface shortwave radiation (kJ m-2 d-1)
-! real(sp), pointer :: srad_dir             ! Direct beam downwelling shortwave raditaion (kJ m-2 d-1)
-! real(sp), pointer :: srad_dif             ! Diffuse downwelling shortwave raditaion (kJ m-2 d-1)
-! real(sp), pointer :: tmean                ! 24 hour mean temperature (degC)
-! real(sp), pointer :: dpet                 ! Daily potential evapotranspiration (mm d-1)
-! real(sp), pointer :: daet
-! real(sp), pointer :: alpha
+! real(dp), pointer :: Ratm                 ! Relative atmospheric pressure to sea-level (fraction)
+! real(dp), pointer :: Patm                 ! Atmospheric pressure to sea-level (Pa)
+! real(dp), pointer :: vpd                  ! Average daytime saturation vapor pressure deficit (Pa)
+! real(dp), pointer :: dayl                 ! Daylength (h)
+! real(dp), pointer :: srad                 ! Downwelling surface shortwave radiation (kJ m-2 d-1)
+! real(dp), pointer :: srad_dir             ! Direct beam downwelling shortwave raditaion (kJ m-2 d-1)
+! real(dp), pointer :: srad_dif             ! Diffuse downwelling shortwave raditaion (kJ m-2 d-1)
+! real(dp), pointer :: tmean                ! 24 hour mean temperature (degC)
+! real(dp), pointer :: dpet                 ! Daily potential evapotranspiration (mm d-1)
+! real(dp), pointer :: daet
+! real(dp), pointer :: alpha
 !
-! real(sp), pointer :: chi                  ! Actual ratio of lead internal to external CO2 (fraction)
-! real(sp), pointer :: chi0                 ! Optimal ratio of lead internal to external CO2 (fraction)
-! real(sp), pointer :: gammastar            ! Photorespiratory compensation point (gammastar in Wang et al. 2017) (Pa)
-! real(sp), pointer :: gpp0                 ! Gross primary productivity under non-water stressed condition (g C m-2 d-1)
-! real(sp), pointer :: gpp1                 ! Gross primary productivity under actual condition (g C m-2 d-1)
-! real(sp), pointer :: gpp_tot              ! Total daily gross primary productivity (g C d-1)
-! real(sp), pointer :: rd                   ! Daily leaf respiration (gC m-2 d-1) >> whole day include day + night
-! real(sp), pointer :: dgp                  ! Optimal daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
-! real(sp), pointer :: dgc                  ! Actual daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
+! real(dp), pointer :: chi                  ! Actual ratio of lead internal to external CO2 (fraction)
+! real(dp), pointer :: chi0                 ! Optimal ratio of lead internal to external CO2 (fraction)
+! real(dp), pointer :: gammastar            ! Photorespiratory compensation point (gammastar in Wang et al. 2017) (Pa)
+! real(dp), pointer :: gpp0                 ! Gross primary productivity under non-water stressed condition (g C m-2 d-1)
+! real(dp), pointer :: gpp1                 ! Gross primary productivity under actual condition (g C m-2 d-1)
+! real(dp), pointer :: gpp_tot              ! Total daily gross primary productivity (g C d-1)
+! real(dp), pointer :: rd                   ! Daily leaf respiration (gC m-2 d-1) >> whole day include day + night
+! real(dp), pointer :: dgp                  ! Optimal daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
+! real(dp), pointer :: dgc                  ! Actual daily canopy conductance (mm m-2 s-1) ??? NEED CONFIRMATION ON UNIT in LPJ-LMFire
 !
-! real(sp), pointer :: dwscal
-! real(sp), pointer :: dphen
-! real(sp), pointer :: dphen_t
-! real(sp), pointer :: dphen_w
+! real(dp), pointer :: dwscal
+! real(dp), pointer :: dphen
+! real(dp), pointer :: dphen_t
+! real(dp), pointer :: dphen_w
 !
-! real(sp), pointer :: water
+! real(dp), pointer :: water
 !
-! real(sp), pointer :: fpc_grid
+! real(dp), pointer :: fpc_grid
 !
-! real(sp), pointer :: elev                 ! Elevation (m)
-! real(sp), pointer :: cellarea             ! Area of gridcell (m2)
-! real(sp), pointer :: areafrac             ! Ground area fraction in gridcell (fraction)
+! real(dp), pointer :: elev                 ! Elevation (m)
+! real(dp), pointer :: cellarea             ! Area of gridcell (m2)
+! real(dp), pointer :: areafrac             ! Ground area fraction in gridcell (fraction)
 !
 ! !-------------------------
 ! ! Local variables
-! real(sp) :: tmean_K               ! Daily mean temperature (K)
-! real(sp) :: lai                   ! Leaf area index (m2 m-2)
+! real(dp) :: tmean_K               ! Daily mean temperature (K)
+! real(dp) :: lai                   ! Leaf area index (m2 m-2)
 !
-! real(sp) :: xi                    ! Constant term in Wang et al. (2017) Eq. 27
-! real(sp) :: ci                    ! Optimal lead internal partial pressure of CO2 (Pa)
-! real(sp) :: ca                    ! Optimal external (ambient) partial pressure of CO2 (Pa)
-! real(sp) :: pi
-! real(sp) :: pa
-! real(sp) :: Kmm                   ! Effective Michaelis–Menten coefficient of Rubisco (Pa)
-! real(sp) :: Kc                    ! Michaelis constant for CO2 in eq.16 (Wang et al. 2017)
-! real(sp) :: Ko                    ! Michaelis constant for O2 in eq.16 (Wang et al. 2017)
-! real(sp) :: Po                    ! O2 partial pressure in eq.17 (Pa) (Wang et al. 2017)
-! real(sp) :: visco                 ! Viscosity of water relative to 25C / 298.15K (fraction)
-! real(sp) :: par                   ! Photosynthetically active radiation (W m-2)
-! real(sp) :: fpar                  ! Fraciton of PAR intercepted by foliage (fraction)
-! real(sp) :: apar                  ! Absorbed photosynthetically active radiation (W m-2)
-! real(sp) :: ppfd                  ! Photosynthetic photo flux density (mol m-2 s-1)
-! real(sp) :: fppfd                 ! Fraciton of PPFD intercepted by foliage (fraction)
-! real(sp) :: appfd                 ! Absorbed (by leaf) photosynthetic photo flux density (mol m-2 s-1)
-! real(sp) :: chi0_term
-! real(sp) :: m
+! real(dp) :: xi                    ! Constant term in Wang et al. (2017) Eq. 27
+! real(dp) :: ci                    ! Optimal lead internal partial pressure of CO2 (Pa)
+! real(dp) :: ca                    ! Optimal external (ambient) partial pressure of CO2 (Pa)
+! real(dp) :: pi
+! real(dp) :: pa
+! real(dp) :: Kmm                   ! Effective Michaelis–Menten coefficient of Rubisco (Pa)
+! real(dp) :: Kc                    ! Michaelis constant for CO2 in eq.16 (Wang et al. 2017)
+! real(dp) :: Ko                    ! Michaelis constant for O2 in eq.16 (Wang et al. 2017)
+! real(dp) :: Po                    ! O2 partial pressure in eq.17 (Pa) (Wang et al. 2017)
+! real(dp) :: visco                 ! Viscosity of water relative to 25C / 298.15K (fraction)
+! real(dp) :: par                   ! Photosynthetically active radiation (W m-2)
+! real(dp) :: fpar                  ! Fraciton of PAR intercepted by foliage (fraction)
+! real(dp) :: apar                  ! Absorbed photosynthetically active radiation (W m-2)
+! real(dp) :: ppfd                  ! Photosynthetic photo flux density (mol m-2 s-1)
+! real(dp) :: fppfd                 ! Fraciton of PPFD intercepted by foliage (fraction)
+! real(dp) :: appfd                 ! Absorbed (by leaf) photosynthetic photo flux density (mol m-2 s-1)
+! real(dp) :: chi0_term
+! real(dp) :: m
 !
-! real(sp) :: rootprop              ! Root proportion in soil layer (fraction)
-! real(sp) :: gminp                 ! Minimum canopy conductance rate (mm m-2 s-1)
+! real(dp) :: rootprop              ! Root proportion in soil layer (fraction)
+! real(dp) :: gminp                 ! Minimum canopy conductance rate (mm m-2 s-1)
 !
-! real(sp) :: tau
-! real(sp) :: tsecs
-! real(sp) :: supply                ! Supply of soil moisture (mm d-1)
-! real(sp) :: demand                ! Demand for soil moisture (mm d-1)
-! real(sp) :: vm0                   ! Optimal rubisco activity (gC m-2 d-1)
-! real(sp) :: rd0                   ! Optimal leaf respiration rate (gC m-2 d-1)
-! real(sp) :: and0                  ! Optimal daily net photosynthesis (gC m-2 d-1)
-! real(sp) :: adt0                  ! Optimal total daytime net photosynthesis (gC m-2 d-1)
-! real(sp) :: adtmm0                ! Optimal total daytime net photosynthesis in mm (mm m-2 d-1)
-! real(sp) :: vm1                   ! Actual leaf rubisco activity (gC m-2 d-1)
-! real(sp) :: adtmm1                ! Actual total daytime net photosynthesis in mm (mm m-2 d-1)
-! real(sp) :: je                    ! APAR-limited photosynthesis rate (molC m-2 h-1)
-! real(sp) :: jc                    ! Rubisco-activity-limited photosynthesis rate (molC m-2 h-1)
+! real(dp) :: tau
+! real(dp) :: tsecs
+! real(dp) :: supply                ! Supply of soil moisture (mm d-1)
+! real(dp) :: demand                ! Demand for soil moisture (mm d-1)
+! real(dp) :: vm0                   ! Optimal rubisco activity (gC m-2 d-1)
+! real(dp) :: rd0                   ! Optimal leaf respiration rate (gC m-2 d-1)
+! real(dp) :: and0                  ! Optimal daily net photosynthesis (gC m-2 d-1)
+! real(dp) :: adt0                  ! Optimal total daytime net photosynthesis (gC m-2 d-1)
+! real(dp) :: adtmm0                ! Optimal total daytime net photosynthesis in mm (mm m-2 d-1)
+! real(dp) :: vm1                   ! Actual leaf rubisco activity (gC m-2 d-1)
+! real(dp) :: adtmm1                ! Actual total daytime net photosynthesis in mm (mm m-2 d-1)
+! real(dp) :: je                    ! APAR-limited photosynthesis rate (molC m-2 h-1)
+! real(dp) :: jc                    ! Rubisco-activity-limited photosynthesis rate (molC m-2 h-1)
 !
 ! !-------------------------
 ! ! Temperature inhibition variables
-! real(sp) :: inhibx1
-! real(sp) :: inhibx2
-! real(sp) :: inhibx3
-! real(sp) :: inhibx4
-! real(sp) :: k1
-! real(sp) :: k2
-! real(sp) :: k3
-! real(sp) :: low
-! real(sp) :: high
-! real(sp) :: tstress
+! real(dp) :: inhibx1
+! real(dp) :: inhibx2
+! real(dp) :: inhibx3
+! real(dp) :: inhibx4
+! real(dp) :: k1
+! real(dp) :: k2
+! real(dp) :: k3
+! real(dp) :: low
+! real(dp) :: high
+! real(dp) :: tstress
 !
 ! ! Rubisco capcity variables
-! real(sp) :: c1
-! real(sp) :: c2
-! real(sp) :: b0
-! real(sp) :: t0
-! real(sp) :: s
-! real(sp) :: sigma
+! real(dp) :: c1
+! real(dp) :: c2
+! real(dp) :: b0
+! real(dp) :: t0
+! real(dp) :: s
+! real(dp) :: sigma
 !
 ! ! Bisection root finding variables
-! real(sp) :: gpd
-! real(sp) :: epsilon
-! real(sp) :: x1
-! real(sp) :: x2
-! real(sp) :: rtbis
-! real(sp) :: dx
-! real(sp) :: fmid
+! real(dp) :: gpd
+! real(dp) :: epsilon
+! real(dp) :: x1
+! real(dp) :: x2
+! real(dp) :: rtbis
+! real(dp) :: dx
+! real(dp) :: fmid
 !
 ! integer :: it
 !

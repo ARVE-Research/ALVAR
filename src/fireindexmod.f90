@@ -7,8 +7,8 @@ implicit none
 
 ! Global variable
 integer(i4), allocatable, dimension(:) :: dryd       ! Number of dry days preceding current day / day since rain
-real(sp), allocatable, dimension(:) :: KBDI_0        ! Previous day KBDI
-real(sp), allocatable, dimension(:) :: prec_acc      ! Rainfall accumulation of the current wet period (mm)
+real(dp), allocatable, dimension(:) :: KBDI_0        ! Previous day KBDI
+real(dp), allocatable, dimension(:) :: prec_acc      ! Rainfall accumulation of the current wet period (mm)
 
 
 contains
@@ -29,21 +29,21 @@ integer(i4), intent(in) :: grid
 integer(i4), intent(in) :: day
 
 ! Pointers
-real(sp), pointer :: DF             ! Drought factor
-real(sp), pointer :: KBDI           ! Keetch-Byram Drought Index (mm equivalent)
-real(sp), pointer :: ForFireMk5     ! Forest fire danger index Mark 5 meter
+real(dp), pointer :: DF             ! Drought factor
+real(dp), pointer :: KBDI           ! Keetch-Byram Drought Index (mm equivalent)
+real(dp), pointer :: ForFireMk5     ! Forest fire danger index Mark 5 meter
 
 ! Local variables
-real(sp) :: tmean         ! 24 hour mean temperature (degC)
-real(sp) :: tmax          ! Daily maximum temperature (degC)
-real(sp) :: rhum          ! Relative humidity (%)
-real(sp) :: wind          ! 10m windspeed (m s-1)
-real(sp) :: prec          ! Daily precipitation (mm)
-real(sp) :: aprec         ! Annual precipitation (mm)
+real(dp) :: tmean         ! 24 hour mean temperature (degC)
+real(dp) :: tmax          ! Daily maximum temperature (degC)
+real(dp) :: rhum          ! Relative humidity (%)
+real(dp) :: wind          ! 10m windspeed (m s-1)
+real(dp) :: prec          ! Daily precipitation (mm)
+real(dp) :: aprec         ! Annual precipitation (mm)
 
-real(sp) :: ForFireMk5_2
+real(dp) :: ForFireMk5_2
 
-real(sp) :: sloperad
+real(dp) :: sloperad
 
 !----------
 ! Initialize global variables at first time step and first grid

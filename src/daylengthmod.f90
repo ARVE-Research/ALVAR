@@ -21,7 +21,6 @@ subroutine daylength(day,lat,dayl_n)
 !paleosimulations. ARVE-Point is likely not to be used for that anyway. JM Oct 30 08
 
 use parametersmod, only : dp,pi,d2r,a2s,solarc,dayspy
-! use statevars, only : sv,dayl
 
 implicit none
 

@@ -13,9 +13,7 @@ module hourlyprecmod
 ! Beuchat et al. (2011) Toward a robust method for subdaily rainflal downscaling from daily data. doi:10.1029/2010WR010342
 ! Menabde & Sivapalan (2000) Modeling of rainfall time series and extremes  https://doi.org/10.1029/2000WR900197
 
-use parametersmod, only : sp,dp,i2,i4
 use randomdistmod, only : randomstate,ran_seed,ranu,ranur,ran_gamma
-use statsmod,      only : gamma_cdf_inv
 
 implicit none
 
@@ -27,30 +25,33 @@ contains
 
 !-----------------------------------------------------------------------
 
-subroutine hourlyprec(year,grid,day)
+subroutine hourlyprec(year,grid,ndyear,day,dprec,prec,tmean,rhum,hprec)
 
 ! Subroutine written by Leo O Lai (Jul 2021)
 
-use utilitiesmod, only : getmonth
-use statevarsmod,   only : dayvars,ndyear
+use parametersmod, only : i4,sp,dp
+use statsmod,      only : gamma_cdf_inv
+use utilitiesmod,  only : getmonth
 
 !arguments
-integer(i4), intent(in) :: year
-integer(i4), intent(in) :: grid
-integer(i4), intent(in) :: day       ! Julian day (1 to 366)
+integer(i4),               intent(in)    :: year
+integer(i4),               intent(in)    :: grid
+integer(i4),               intent(in)    :: ndyear
+integer(i4),               intent(in)    :: day       ! Julian day (1 to 366)
+real(sp),                  intent(in)    :: dprec
+real(sp),    dimension(:), intent(in)    :: prec
+real(sp),    dimension(:), intent(in)    :: tmean
+real(sp),    dimension(:), intent(in)    :: rhum
+real(dp),    dimension(:), intent(inout) :: hprec
 
 integer(i4) :: month                 ! Current month (1 to 12)
 integer(i4) :: sday                  ! Index of start day of current month
 integer(i4) :: eday                  ! Index of end day of current month
 
-! Pointers
-real(sp),               pointer :: dprec        ! 24h total precipitaiton of current day (mm)
-real(dp), dimension(:), pointer :: hprec        ! Hourly temperature (mm)
-
 ! Met variables
-real(sp), dimension(:), allocatable :: prec     ! Monthly array of daily 24h total precipitation (mm)
-real(sp), dimension(:), allocatable :: tmean    ! Monthly array of daily mean temperature (C)
-real(sp), dimension(:), allocatable :: rhum     ! Monthly array of daily mean humidity (%)
+real(sp), allocatable, dimension(:) :: mprec     ! Monthly array of daily 24h total precipitation (mm)
+real(sp), allocatable, dimension(:) :: mtmean    ! Monthly array of daily mean temperature (C)
+real(sp), allocatable, dimension(:) :: mrhum     ! Monthly array of daily mean humidity (%)
 
 ! Hourly precipitation regression variables for gamma random number generator
 real(sp) :: mean_1             ! Mean of hourly precipitation
@@ -71,29 +72,26 @@ integer(i4), dimension(24) :: sort_loc
 real(sp)                   :: val
 integer(i4)                :: loc
 
-real(dp) :: diff
+real(sp) :: diff
 integer :: i
 
 !------
 ! Get daily met variables of the current month, calculate start and end array index of the month
 
-call getmonth(day, ndyear, month, sday, eday)
+call getmonth(day,ndyear,month,sday,eday)
 
-allocate(prec(eday-sday+1))
-allocate(tmean(eday-sday+1))
-allocate(rhum(eday-sday+1))
+allocate(mprec(eday-sday+1))
+allocate(mtmean(eday-sday+1))
+allocate(mrhum(eday-sday+1))
 
-prec  = dayvars(grid,sday:eday)%prec
-tmean = dayvars(grid,sday:eday)%tmean
-rhum  = dayvars(grid,sday:eday)%rhum
-
-dprec => dayvars(grid,day)%prec
-hprec => dayvars(grid,day)%hprec
+mprec  = prec(sday:eday)
+mtmean = tmean(sday:eday)
+mrhum  = rhum(sday:eday)
 
 !------
 
 ! Initialize the random state for hourly prec simulation
-if (grid == 1 .and. year == 1 .and. day == 1) call ran_seed(0, hprec_rndst)
+if (year == 1 .and. grid == 1 .and. day == 1) call ran_seed(0, hprec_rndst)
 
 !------
 
@@ -108,7 +106,7 @@ else                       ! Wet day
 
   ! Get hourly rainfall statistics (variance, skewness and wet interval) using disaggregation
   ! regression model from Beuchat et al. (2011)
-  if (dprec == sum(prec)) then    ! only one wet day in month
+  if (dprec == sum(mprec)) then    ! only one wet day in month
 
     var_1  = 0.1
     skew_1 = 0.01
@@ -116,7 +114,7 @@ else                       ! Wet day
 
   else
 
-    call hprec_regression(prec,tmean,rhum,var_1,skew_1,dryi_1)
+    call hprec_regression(mprec,mtmean,mrhum,var_1,skew_1,dryi_1)
 
   end if
 
@@ -148,7 +146,7 @@ else                       ! Wet day
   !
   ! The values are then fitted into a gamma function to generate a random gamma number as a measure of
   ! hourly rain depth
-  call sort_descend(ran, sort_val, sort_loc)
+  call sort_descend(ran,sort_val,sort_loc)
 
   do i = 1, wet_hour
 
@@ -157,7 +155,7 @@ else                       ! Wet day
 
     !---
 
-    hprec(loc) = ran_gamma_num(shape, scale, hprec_rndst)
+    hprec(loc) = ran_gamma_num(shape,scale,hprec_rndst)
 
     ! Round to zero if hourly prec is less than 1.e-2
     if (hprec(loc) < 0.01) hprec(loc) = 0.
@@ -178,10 +176,9 @@ else                       ! Wet day
 
 end if
 
-
-deallocate(prec)
-deallocate(tmean)
-deallocate(rhum)
+deallocate(mprec)
+deallocate(mtmean)
+deallocate(mrhum)
 
 end subroutine hourlyprec
 
@@ -195,6 +192,8 @@ subroutine hprec_regression(prec,tmean,rhum,var_1,skew_1,dryi_1)
 
 ! Get hourly rainfall statistics (variance, skewness and wet interval) using disaggregation
 ! regression model from Beuchat et al. (2011)
+
+use parametersmod, only : i4,sp
 
 implicit none
 
@@ -520,14 +519,16 @@ real(sp) function variance(a)
 
 ! Find variance of a real array
 
+use parametersmod, only : i4,sp
+
 implicit none
 
 real(sp), dimension(:), intent(in) :: a
 
 real(sp) :: summ
 real(sp) :: mean
-integer :: len
-integer :: i
+integer(i4) :: len
+integer(i4) :: i
 
 !---
 
@@ -552,6 +553,8 @@ real(sp) function skewness(a,sd)
 
 ! Find the skewness of a real array with given standard deviation (sd)
 
+use parametersmod, only : i4,sp
+
 implicit none
 
 real(sp), dimension(:), intent(in) :: a
@@ -559,8 +562,8 @@ real(sp)              , intent(in) :: sd
 
 real(sp) :: summ
 real(sp) :: mean
-integer :: len
-integer :: i
+integer(i4) :: len
+integer(i4) :: i
 
 !---
 
@@ -585,6 +588,8 @@ real(sp) function autocorrel(a,k)
 
 ! Find the auto-correlation of real array with given lag-k
 
+use parametersmod, only : i4,sp
+
 implicit none
 
 real(sp), dimension(:), intent(in) :: a
@@ -593,8 +598,8 @@ integer               , intent(in) :: k
 real(sp) :: summ
 real(sp) :: summ2
 real(sp) :: mean
-integer :: len
-integer :: i
+integer(i4) :: len
+integer(i4) :: i
 
 !---
 
@@ -632,6 +637,8 @@ subroutine sort_ascend(a,sort_val,sort_loc)
 ! A subroutine to sort a real array in decending order
 ! Return two arrays for decending values and the index locations
 
+use parametersmod, only : i4,sp
+
 implicit none
 
 real(sp),    dimension(:), intent(in)  :: a
@@ -643,7 +650,7 @@ real(sp), dimension(:), allocatable :: b
 real(sp)    :: small
 real(sp)    :: val
 integer(i4) :: loc
-integer :: i
+integer(i4) :: i
 
 !------
 
@@ -677,6 +684,8 @@ subroutine sort_descend(a,sort_val,sort_loc)
 ! A subroutine to sort a real array in decending order
 ! Return two arrays for decending values and the index locations
 
+use parametersmod, only : i4,sp
+
 implicit none
 
 real(sp),    dimension(:), intent(in)  :: a
@@ -688,7 +697,7 @@ real(sp), dimension(:), allocatable :: b
 real(sp)    :: large
 real(sp)    :: val
 integer(i4) :: loc
-integer :: i
+integer(i4) :: i
 
 !------
 
@@ -724,6 +733,9 @@ FUNCTION ran_gamma_num(G,H, rndst)
 ! *       G/H and variance G/(H^2). (ie. shape parameter G & scale
 ! *       parameter H)
 ! *
+
+use parametersmod, only : dp
+
 real(dp) :: C,D,R,ran_gamma_num,ZBQLU01,G,H,A,z1,z2,B1,B2,M
 real(dp) :: U1,U2,U,V,TEST,X
 real(dp) :: c1,c2,c3,c4,c5,w

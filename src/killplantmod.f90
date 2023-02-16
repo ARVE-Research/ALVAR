@@ -3,8 +3,6 @@ module killplantmod
 ! Module to kill plant if productivity is too low
 ! Code adapted from LPJ-LMFire by Leo Lai (Oct 2021)
 
-use parametersmod, only : i2,i4,sp,dp,missing_i2,missing_sp,Tfreeze,daysec
-
 implicit none
 
 !---------------------------------------------------------------------
@@ -13,57 +11,40 @@ implicit none
 
 contains
 
-subroutine killplant(year,grid,day)
+subroutine killplant(abm_inc,present,lm_ind,rm_ind,sm_ind,hm_ind,nind,litter_ag_fast,litter_ag_slow,litter_bg)
 
-use pftparmod,    only : npft,pftpar,tree
-use statevarsmod, only : ndyear,gppvars,vegvars,lprint,gprint
+use parametersmod, only : i4,sp
+use pftparmod,     only : npft,tree
 
-integer(i4), intent(in) :: year
-integer(i4), intent(in) :: grid
-integer(i4), intent(in) :: day
+!-------------------------
+! Pointer variables
+real(sp), dimension(:), intent(in)    :: abm_inc
+logical,  dimension(:), intent(inout) :: present           ! PFT present
+real(sp), dimension(:), intent(inout) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: rm_ind            ! Root carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: nind              ! PFT population
+real(sp), dimension(:), intent(inout) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: litter_bg         ! Below ground litter pool (gC m-2)
 
 !-------------------------
 ! Parameters
 real(sp), parameter :: bminc_ind_min = 1.e-6   ! Minimum annual productivity per individual has to be more than this value (gC)
 
-!-------------------------
-! Pointer variables
-logical,  pointer, dimension(:) :: present           ! PFT present
-real(sp), pointer, dimension(:) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: rm_ind            ! Root carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: nind              ! PFT population
-real(sp), pointer, dimension(:) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: litter_bg         ! Below ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: bm_inc
-
-real(sp) :: bm_inc_ind
-integer  :: pft
+real(sp)    :: bm_inc_ind
+integer(i4) :: pft
 
 !-------------------------
-
-present   => vegvars(grid)%present
-lm_ind    => vegvars(grid)%lm_ind
-rm_ind    => vegvars(grid)%rm_ind
-sm_ind    => vegvars(grid)%sm_ind
-hm_ind    => vegvars(grid)%hm_ind
-nind      => vegvars(grid)%nind
-
-litter_ag_fast => vegvars(grid)%litter_ag_fast
-litter_ag_slow => vegvars(grid)%litter_ag_slow
-litter_bg      => vegvars(grid)%litter_bg
-bm_inc         => vegvars(grid)%bm_inc
-
-!-------------------------
-
 
 do pft = 1, npft
 
   if (present(pft)) then
 
-    bm_inc_ind = bm_inc(pft) / nind(pft)
+    ! bm_inc_ind = bm_inc(pft) / nind(pft)
+
+    bm_inc_ind = abm_inc(pft) / nind(pft) ! Get annual biomass increment (abm_inc) as in LPJ
 
     if (bm_inc_ind < bminc_ind_min) then
 

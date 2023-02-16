@@ -191,6 +191,55 @@ end subroutine tridiag
 
 ! ------------------------------------------------------------------------------------------------------------------
 
+subroutine which(a,x,idx)
+
+! Subroutine to get an array of index values in array a that matches value x
+! Similar to which() function in R
+
+implicit none
+
+real(sp),                 dimension(:), intent(in)    :: a
+real(sp),                               intent(in)    :: x
+integer(i4), allocatable, dimension(:), intent(inout) :: idx
+
+integer(i4) :: n
+integer(i4) :: m
+integer(i4) :: i
+
+!------
+
+n = size(a)
+
+!------
+
+m = 0
+
+do i = 1, n
+  if (a(i) == x) then
+    m = m + 1
+  end if
+end do
+
+!------
+
+allocate(idx(m))
+
+!------
+
+m = 0
+
+do i = 1, n
+  if (a(i) == x) then
+    m = m + 1
+    idx(m) = i
+  end if
+end do
+
+
+end subroutine
+
+! ------------------------------------------------------------------------------------------------------------------
+
 subroutine getmonth(day,ndyear,month,startday,endday)
 
 ! Get the month (1-12) from input Julian day and get the start and end Julian

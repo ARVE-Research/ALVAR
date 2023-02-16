@@ -3,8 +3,6 @@ module allocationmod
 ! Module to calculate vegation carbon allocation
 ! Code adapted from LPJ-LMFire by Leo Lai (Oct 2021)
 
-use parametersmod, only : i2,i4,sp,dp,missing_i2,missing_sp,Tfreeze,daysec
-
 implicit none
 
 !---------------------------------------------------------------------
@@ -13,14 +11,39 @@ implicit none
 
 contains
 
-subroutine allocation(year,grid,day)
+subroutine allocation(day,tree,evergreen,present,dwscal,dphen,npp,bm_inc,fpc_grid,fpc_ind,fpc_inc,nind,sla,stemdiam,&
+                      height,crownarea,lai_ind,lm_ind,rm_ind,sm_ind,hm_ind,clabile,litter_ag_fast,litter_ag_slow,litter_bg)
 
-use pftparmod,    only : npft,pftpar,tree
-use statevarsmod, only : ndyear,dayvars,soilvars,gppvars,vegvars,topovars,lprint,gprint,gridlon,gridlat
+use parametersmod, only : i4,sp,dp
+use pftparmod,     only : npft,pftpar
 
-integer(i4), intent(in) :: year
-integer(i4), intent(in) :: grid
-integer(i4), intent(in) :: day
+implicit none
+
+integer(i4),            intent(in)    :: day
+logical,  dimension(:), intent(in)    :: tree
+logical,  dimension(:), intent(in)    :: evergreen
+logical,  dimension(:), intent(inout) :: present
+real(sp), dimension(:,:), intent(in)    :: dwscal
+real(sp), dimension(:), intent(in)    :: dphen
+real(sp), dimension(:), intent(in)    :: npp
+real(sp), dimension(:), intent(in)    :: bm_inc
+real(sp), dimension(:), intent(inout) :: fpc_grid
+real(sp), dimension(:), intent(inout) :: fpc_ind
+real(sp), dimension(:), intent(inout) :: fpc_inc
+real(sp), dimension(:), intent(inout) :: nind
+real(sp), dimension(:), intent(inout) :: sla
+real(sp), dimension(:), intent(inout) :: stemdiam
+real(sp), dimension(:), intent(inout) :: height
+real(sp), dimension(:), intent(inout) :: crownarea
+real(sp), dimension(:), intent(inout) :: lai_ind
+real(sp), dimension(:), intent(inout) :: lm_ind
+real(sp), dimension(:), intent(inout) :: rm_ind
+real(sp), dimension(:), intent(inout) :: sm_ind
+real(sp), dimension(:), intent(inout) :: hm_ind
+real(sp), dimension(:), intent(inout) :: clabile
+real(sp), dimension(:), intent(inout) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: litter_bg         ! Below ground litter pool (gC m-2)
 
 !-------------------------
 ! Parameters
@@ -30,41 +53,13 @@ real(sp), parameter :: allom2 = 40
 real(sp), parameter :: allom3 = 0.5
 real(sp), parameter :: allom4 = 0.3
 real(sp), parameter :: reinickerp = 1.6
-real(sp), parameter :: latosa     = 8.e3
-real(sp), parameter :: wooddens   = 2.e5
+! real(sp), parameter :: latosa     = 8.e3
+! real(sp), parameter :: wooddens   = 2.e5
 real(sp), parameter :: nind_min         = 1.e-10      !minimum individual density for persistence of PFT (indiv/m2)
 real(sp), parameter :: eps              = 1.e-6       !epsilon parameter (?)
 integer, parameter :: nseg = 20
 real(sp), parameter :: xacc =  0.1     !x-axis precision threshold for the allocation solution
 real(dp), parameter :: yacc =  1.e-10  !y-axis precision threshold for the allocation solution
-
-real(sp), parameter :: crownarea_max = 15.0
-
-!-------------------------
-! Pointer variables
-logical,  pointer, dimension(:) :: present
-logical,  pointer, dimension(:) :: estab
-logical,  pointer, dimension(:) :: survive
-real(sp), pointer, dimension(:) :: dwscal
-real(sp), pointer, dimension(:) :: fpc_grid
-real(sp), pointer, dimension(:) :: fpc_ind
-real(sp), pointer, dimension(:) :: fpc_inc
-real(sp), pointer, dimension(:) :: nind
-real(sp), pointer, dimension(:) :: sla
-real(sp), pointer, dimension(:) :: stemdiam
-real(sp), pointer, dimension(:) :: height
-real(sp), pointer, dimension(:) :: crownarea
-real(sp), pointer, dimension(:) :: lai_ind
-real(sp), pointer, dimension(:) :: hm_ind
-real(sp), pointer, dimension(:) :: lm_ind
-real(sp), pointer, dimension(:) :: sm_ind
-real(sp), pointer, dimension(:) :: rm_ind
-real(sp), pointer, dimension(:) :: npp
-
-real(sp), pointer, dimension(:) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: litter_bg         ! Below ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: bm_inc
 
 !-------------------------
 ! Local variables
@@ -73,7 +68,10 @@ real(sp) :: rm
 real(sp) :: sm
 real(sp) :: hm
 real(sp) :: bm_inc_ind
+real(sp) :: bm_inc_req
 real(sp) :: awscal
+real(sp) :: latosa
+real(sp) :: wooddens
 real(sp) :: lm2rm
 real(sp) :: lminc_ind_min
 real(sp) :: lm1
@@ -89,6 +87,7 @@ real(sp) :: sign
 real(sp) :: rtbis
 real(sp) :: sap_xsa
 real(sp) :: ir_max
+real(sp) :: crownarea_max
 
 real(sp) :: lminc_ind
 real(sp) :: rminc_ind
@@ -98,36 +97,11 @@ real(sp) :: fpc_grid_old
 
 real(sp), dimension(4) :: treecarbon
 
-integer :: i
-integer :: pft
+integer(i4) :: i
+integer(i4) :: pft
+integer(i4) :: dayb
 
-
-!-------------------------
-
-npp       => gppvars(grid,day)%npp
-dwscal    => gppvars(grid,day)%dwscal
-
-present   => vegvars(grid)%present
-estab     => vegvars(grid)%estab
-survive   => vegvars(grid)%survive
-fpc_grid  => vegvars(grid)%fpc_grid
-fpc_ind   => vegvars(grid)%fpc_ind
-fpc_inc   => vegvars(grid)%fpc_inc
-nind      => vegvars(grid)%nind
-sla       => vegvars(grid)%sla
-stemdiam  => vegvars(grid)%stemdiam
-height    => vegvars(grid)%height
-crownarea => vegvars(grid)%crownarea
-lai_ind   => vegvars(grid)%lai_ind
-hm_ind    => vegvars(grid)%hm_ind
-lm_ind    => vegvars(grid)%lm_ind
-sm_ind    => vegvars(grid)%sm_ind
-rm_ind    => vegvars(grid)%rm_ind
-
-litter_ag_fast => vegvars(grid)%litter_ag_fast
-litter_ag_slow => vegvars(grid)%litter_ag_slow
-litter_bg      => vegvars(grid)%litter_bg
-bm_inc         => vegvars(grid)%bm_inc
+real(sp) :: c_export
 
 !-------------------------
 
@@ -142,7 +116,9 @@ do pft = 1, npft
     hm = hm_ind(pft)
     rm = rm_ind(pft)
 
-    bm_inc(pft) = sum(gppvars(grid,:)%npp(pft))
+    ! bm_inc(pft) = sum(gppvars(grid,:)%npp(pft))
+
+    ! bm_inc_ind = gppvars(grid,day)%npp(pft) / nind(pft)
 
     bm_inc_ind = bm_inc(pft) / nind(pft)
 
@@ -154,9 +130,26 @@ do pft = 1, npft
 
     ! awscal = sum(vegvars(grid,:)%dwscal) / ndyear
 
-    ir_max = pftpar(16,pft)
+    ir_max   = pftpar%lmtorm(pft)
+    latosa   = pftpar%latosa(pft)
+    wooddens = pftpar%wooddens(pft)
+    crownarea_max = pftpar%maxcrowna(pft)
 
-    awscal = dwscal(pft)
+    dayb = day - 179
+
+    if (dayb <= 0) then
+
+      dayb = 365 + dayb
+
+      awscal = (sum(dwscal(dayb:365,:)) + sum(dwscal(1:day,:))) / 180.
+
+    else
+
+      awscal = sum(dwscal(dayb:day,:)) / 180.
+
+    end if
+
+    awscal = sum(dwscal(:,pft)) / 365.
 
     lm2rm = max(ir_max * awscal, 0.1)
 
@@ -177,11 +170,43 @@ do pft = 1, npft
 
       rminc_ind_min = lm1 / lm2rm - rm
 
+      ! ########################
+      ! TESTING for clabile based on root requirement
+      ! if (rminc_ind_min > 0. .and. lminc_ind_min > 0. .and. rminc_ind_min + lminc_ind_min >= bm_inc_ind) then
+      !   if (dphen(pft) > 0.05) then
+      !     if (clabile(pft) > 0. .and. (.not.evergreen(pft))) then
+      !
+      !       c_export = (rminc_ind_min + lminc_ind_min - bm_inc_ind) * nind(pft)
+      !       c_export = (c_export * dphen(pft)) / 0.75
+      !
+      !       if (c_export < 0.) write(0,*) c_export
+      !       c_export = min(c_export, clabile(pft))
+      !
+      !       clabile(pft) = clabile(pft) + c_export * 0.25
+      !       c_export = c_export * 0.75
+      !
+      !       bm_inc_ind = bm_inc_ind + c_export / nind(pft)
+      !       clabile(pft) = clabile(pft) - c_export
+      !
+      !     end if
+      !   end if
+      ! end if
+      ! ########################
+
+      ! if (rminc_ind_min > 0. .and. lminc_ind_min > 0. .and. rminc_ind_min + lminc_ind_min >= bm_inc_ind) then
+      !
+      !   bm_inc_req   = ((rminc_ind_min + lminc_ind_min) - bm_inc_ind) * nind(pft)
+      !   bm_inc_req   = min(clabile(pft), bm_inc_req)
+      !   bm_inc_ind   = bm_inc_ind + bm_inc_req / nind(pft)
+      !   clabile(pft) = clabile(pft) - bm_inc_req
+      !
+      ! end if
+
       !-------------------------
 
       if (rminc_ind_min > 0. .and. lminc_ind_min > 0. .and. rminc_ind_min + lminc_ind_min <= bm_inc_ind) then
 
-        if (lprint .and. grid==gprint) write(0,*) 'Normal allocation'
+        ! write(0,*) 'Normal allocation: ', pft
 
         !Normal allocation (positive increment to all living C compartments)
 
@@ -213,7 +238,7 @@ do pft = 1, npft
 
           !evaluate f(x1) = LHS of eqn (22) at x1
 
-          fx1 = root(lm,sm,hm,rm,bm_inc_ind,lm2rm,sla(pft),x1)
+          fx1 = root(sla(pft),lm2rm,latosa,wooddens,lm,sm,hm,rm,bm_inc_ind,x1)
 
           !Find approximate location of leftmost root on the interval (x1,x2).
           !Subdivide (x1,x2) into nseg equal segments seeking change in sign of f(xmid) relative to f(x1).
@@ -227,7 +252,7 @@ do pft = 1, npft
 
             xmid = xmid + dx
 
-            fmid = root(lm,sm,hm,rm,bm_inc_ind,lm2rm,sla(pft),xmid)
+            fmid = root(sla(pft),lm2rm,latosa,wooddens,lm,sm,hm,rm,bm_inc_ind,xmid)
 
             if (fmid * fx1 <= 0. .or. xmid >= x2) exit  !sign has changed or we are over the upper bound
 
@@ -245,7 +270,7 @@ do pft = 1, npft
 
           !Apply bisection method to find root on the new interval (x1,x2)
 
-          fx1 = root(lm,sm,hm,rm,bm_inc_ind,lm2rm,sla(pft),x1)
+          fx1 = root(sla(pft),lm2rm,latosa,wooddens,lm,sm,hm,rm,bm_inc_ind,x1)
 
           if (fx1 >= 0.) then
             sign = -1.
@@ -268,13 +293,13 @@ do pft = 1, npft
 
             !calculate fmid = f(xmid) [eqn (22)]
 
-            fmid = root(lm,sm,hm,rm,bm_inc_ind,lm2rm,sla(pft),xmid)
+            fmid = root(sla(pft),lm2rm,latosa,wooddens,lm,sm,hm,rm,bm_inc_ind,xmid)
 
             if (fmid * sign <= 0.) rtbis = xmid
 
             if (dx < xacc .or. abs(fmid) <= yacc) exit
 
-            if (i > 20) write(0,*)'second alloc loop flag',i,dx,abs(fmid),'pft:',pft,fpc_grid,nind,gridlon(grid),gridlat(grid)
+            if (i > 20) write(0,*)'second alloc loop flag',i,dx,abs(fmid),'pft:',pft,fpc_grid,nind
             if (i > 50) stop 'Too many iterations allocmod'
 
             i = i + 1
@@ -299,7 +324,7 @@ do pft = 1, npft
 
       !-------------------------
 
-        ! if (lprint .and. grid==gprint) write(0,*) 'Abnormal allocation'
+        ! write(0,*) 'Abnormal allocation: ', pft
 
         !Abnormal allocation: reduction in some C compartment(s) to satisfy allometry
 
@@ -387,7 +412,7 @@ do pft = 1, npft
 
         height(pft) = sm_ind(pft) / sap_xsa / wooddens
 
-        stemdiam(pft)    = (height(pft) / allom2) ** (1. / allom3)                  !eqn (C)
+        stemdiam(pft)  = (height(pft) / allom2) ** (1. / allom3)                  !eqn (C)
 
         crownarea(pft) = min(allom1 * (stemdiam(pft)**reinickerp), crownarea_max)  !eqn (D)
 
@@ -458,6 +483,16 @@ do pft = 1, npft
 
   end if ! Present / absent IF condition
 
+  ! if (lprint .and. grid==gprint .and.pft==7) write(0,*) 'Last year mass: ', lm, rm, sm, hm
+  ! if (lprint .and. grid==gprint .and.pft==7) write(0,*) year, day, lminc_ind, rminc_ind, sminc_ind, bm_inc_ind,&
+  !                                         lminc_ind_min, rminc_ind_min, 'Current mass: ', &
+  !                                         lm_ind(pft), rm_ind(pft), sm_ind(pft), hm_ind(pft), nind(pft), &
+  !                                         height(pft), stemdiam(pft), crownarea(pft), lai_ind(pft), &
+  !                                         fpc_grid(pft), vegvars(grid)%clabile(pft)
+  ! if (lprint .and. grid==gprint .and. pft<=2) write(0,*) '            '
+  ! if (lprint .and. grid==gprint .and. pft<=2) write(0,*) 'TOTAL: ', (lm_ind+rm_ind+sm_ind+hm_ind)*nind, 'NPP:',bm_inc
+  ! if (lprint .and. grid==gprint .and. pft==2) write(0,*) '            '
+
 end do ! PFT loop
 
 
@@ -490,44 +525,20 @@ do pft = 1, npft
     sm_ind(pft) = 0.
     hm_ind(pft) = 0.
 
-    ! fpc_grid(pft) = 0.
+    fpc_grid(pft) = 0.
 
   end if
 
 end do
 
-!-------------------------
-
-
-if (lprint .and. grid==gprint) write(0,*) year, day, lminc_ind, rminc_ind, sminc_ind, bm_inc_ind, &
-                                        lm_ind(4), rm_ind(4), sm_ind(4), hm_ind(4), nind(4), &
-                                        height(4), stemdiam(4), crownarea(4), lai_ind(4), &
-                                        sum(dwscal)/npft, sum(dayvars(grid,:)%prec)
-
-if (lprint .and. grid==gprint) write(0,*) "bm_inc: ", bm_inc, "bm_inc_ind: ", 0.9*  bm_inc / nind, 'fpc_grid:', fpc_grid
-
-! if (any(vegvars(grid)%fpc_grid > 1.0)) write(0,*) year, vegvars(grid)%fpc_grid
-!
-! if (lprint .and. grid==gprint) print *, sum(vegvars(grid,:)%gpp), &
-!                                         sum(vegvars(grid,:)%aresp), &
-!                                         sum(vegvars(grid,:)%npp)
-
-
-! if (height > 20.) print *, gridlon(grid), gridlat(grid)
-
-
-
-
-
-
-
-
-
 end subroutine allocation
 
 !---------------------------------------------------------
 
-real(sp) function root(lm,sm,hm,rm,inc,lm2rm,sla,x)
+real(sp) function root(sla,lm2rm,latosa,wooddens,lm,sm,hm,rm,inc,x)
+
+use parametersmod, only : sp
+use pftparmod,     only : pftpar
 
 implicit none
 
@@ -539,8 +550,8 @@ real(sp), parameter :: allom2 = 40.
 real(sp), parameter :: allom3 = 0.5
 real(sp), parameter :: allom4 = 0.3
 real(sp), parameter :: reinickerp = 1.6
-real(sp), parameter :: latosa     = 8.e3
-real(sp), parameter :: wooddens   = 2.e5
+! real(sp), parameter :: latosa     = 8.e3
+! real(sp), parameter :: wooddens   = 2.e5
 real(sp), parameter :: a1  = 2. / allom3
 real(sp), parameter :: a2  = 1. + a1
 real(sp), parameter :: a3  = allom2**a1
@@ -549,6 +560,8 @@ real(sp), parameter :: a3  = allom2**a1
 
 real(sp), intent(in) :: sla    !specific leaf area
 real(sp), intent(in) :: lm2rm  !leaf mass to root mass ratio
+real(sp), intent(in) :: latosa
+real(sp), intent(in) :: wooddens
 real(sp), intent(in) :: lm     !individual leaf mass
 real(sp), intent(in) :: sm     !individual sapwood mass
 real(sp), intent(in) :: hm     !individual heartwood mass

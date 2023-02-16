@@ -16,9 +16,8 @@ integer, parameter :: dp = real64  ! 8 byte real
 
 integer, parameter :: so = output_unit  ! unit number for standard output
 
-integer, parameter :: baseyr = 1871
-
 real(sp), parameter :: Tfreeze = 273.15 ! freezing temperature of freshwater (K)
+real(sp), parameter :: Pstd    = 101325.       !Standard pressure  (Pa)
 
 real(dp), parameter :: dayspy = 365._dp     !number of days in one year
 real(dp), parameter :: daysec = 86400._dp   !number of seconds in 24hrs
@@ -26,16 +25,16 @@ real(dp), parameter :: hr1    = 3600._dp    !one hour in seconds
 real(dp), parameter :: hr23   = 82800._dp   !23 hours in seconds
 
 real(dp), parameter :: pi     = 3.14159265358979323846_dp
-real(dp), parameter :: solarc = 1360.            !Solar constant (1360 W/m2)
-real(dp), parameter :: d2r    = pi / 180.        !conversion factor from degrees to radians
-real(dp), parameter :: r2d    = 180. / pi        !conversion factor from degrees to radians
-real(dp), parameter :: a2s    = 1. / (300. * pi) !conversion factor from solar angular to seconds
+real(sp), parameter :: solarc = 1360.            !Solar constant (1360 W/m2)
+real(sp), parameter :: d2r    = pi / 180.        !conversion factor from degrees to radians
+real(sp), parameter :: r2d    = 180. / pi        !conversion factor from degrees to radians
+real(sp), parameter :: a2s    = 1. / (300. * pi) !conversion factor from solar angular to seconds
 
 real(sp), parameter :: hsp = huge(sp)    ! largest positive 4-byte real
 
 integer, parameter, dimension(12) :: midday    = [ 16,44,75,105,136,166,197,228,258,289,319,350 ]  !day number of mid-month day
 
-real(sp),    parameter :: missing_sp = -9999.
+real(dp),    parameter :: missing_sp = -9999.
 integer(i2), parameter :: missing_i2 = -32768
 
 contains

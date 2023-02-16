@@ -22,9 +22,10 @@ program main
 use parametersmod, only : i1,i2,i4,sp,dp
 use errormod,      only : ncstat,netcdf_err
 use coordsmod,     only : index,parsecoords
-use outputmod,     only : infompi,getoutfile,getoutfile_onelayer
-use modelmod,      only : model
-use gwgenmod,      only : gwgen
+use mpivarsmod,    only : mpivars
+use initmod,       only : initjob
+use outputmod,     only : getoutfile,getoutfile_onelayer
+use drivermod,     only : driver
 use netcdf
 use mpi
 
@@ -39,7 +40,7 @@ integer :: ierr
 integer :: infosize
 integer :: sendsize
 
-type(infompi) :: info
+type(mpivars) :: info
 
 integer(i4), allocatable, dimension(:) :: srt
 integer(i4), allocatable, dimension(:) :: cnt
@@ -52,9 +53,9 @@ integer(i4), dimension(2) :: job
 
 call MPI_INIT(ierr)
 
-call MPI_COMM_SIZE(MPI_COMM_WORLD, numtasks, ierr)
+call MPI_COMM_SIZE(MPI_COMM_WORLD,numtasks,ierr)
 
-call MPI_COMM_RANK(MPI_COMM_WORLD, rank, ierr)
+call MPI_COMM_RANK(MPI_COMM_WORLD,rank,ierr)
 
 !--------------------
 
@@ -70,6 +71,8 @@ infosize = sizeof(info)
 
 sendsize = infosize + (8*numtasks)
 
+!--------------------
+
 allocate(ob(sendsize))
 
 ob = 0
@@ -78,195 +81,60 @@ ob = 0
 
 if (rank == 0) then
 
-  call startmpi(info, srt, cnt)
-
-  info%validcell = sum(cnt)
+  call initjob(info,srt,cnt)
 
   ! call getoutfile(info)
 
   call getoutfile_onelayer(info)
 
-  call infotobyte(info, srt, cnt, ob)
+  call infotobyte(info,srt,cnt,ob)
 
 end if
 
-!---
+!--------------------
 ! Broadcast all info to all processes
 
-call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+call mpi_barrier(MPI_COMM_WORLD,ierr)
 
-call MPI_BCAST(ob, (sendsize/4), MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+call mpi_bcast(ob,(sendsize/4),MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
 
-!---
+!--------------------
 
 if (rank == 0) write(0,*) 'Broadcast complete'
 
 if (rank /= 0) then
 
-  call bytetoinfo(info, srt, cnt, ob)
+  call bytetoinfo(info,srt,cnt,ob)
 
 end if
 
-!---
+!--------------------
 
-job = [srt(rank+1), cnt(rank+1)]
+job = [srt(rank+1),cnt(rank+1)]
 
 write(0,*) 'Rank:', rank, 'recieved cell srt and cnt: ', job
 
 !--------------------
 
-call model(info, job, rank)
+call driver(info,job,rank)
 
 !--------------------
 
-call MPI_FINALIZE(ierr)
+call mpi_finalize(ierr)
 
-
-
+!-------------------------------------------------------
+!-------------------------------------------------------
+!-------------------------------------------------------
+!-------------------------------------------------------
 !-------------------------------------------------------
 
 contains
-
-subroutine startmpi(info,srt,cnt)
-
-use statevarsmod, only : startyr,calcyrs
-
-type(infompi), target              , intent(inout) :: info
-integer(i4),           dimension(:), intent(inout) :: srt
-integer(i4),           dimension(:), intent(inout) :: cnt
-
-integer :: i
-integer :: n
-
-integer :: ifid
-integer :: dimid
-integer :: ilen
-integer :: tlen
-
-!--- File variables
-character(100), pointer :: infile
-character(100), pointer :: outfile
-character(100), pointer :: timestring
-integer(i4)   , pointer :: nproc
-integer(i4)   , pointer :: t0
-integer(i4)   , pointer :: nt
-real(sp)      , pointer :: plon
-real(sp)      , pointer :: plat
-
-character(100) :: gridlonlat
-
-integer :: len
-integer :: remainder
-
-type(index) :: timevals
-
-integer(i4) :: baseyr
-integer(i4) :: t1
-
-
-infile     => info%infile
-outfile    => info%outfile
-timestring => info%timestring
-nproc      => info%nproc
-t0         => info%t0
-nt         => info%nt
-plon       => info%plon
-plat       => info%plat
-
-
-call getarg(1,infile)
-
-ncstat = nf90_open(infile,nf90_nowrite,ifid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_dimid(ifid,'index',dimid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inquire_dimension(ifid,dimid,len=ilen)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_dimid(ifid,'time',dimid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inquire_dimension(ifid,dimid,len=tlen)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_close(ifid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!--------------------
-
-call getarg(2,gridlonlat)
-
-call parsecoords(gridlonlat,timevals)
-
-plon = real(timevals%minlon)
-plat = real(timevals%minlat)
-
-if (plon > 180. .OR. plon < -180) then
-  write(0,*) ' '
-  write(0,*) 'User-specified longitude exceeded dimension'
-  write(0,*) ' '
-  stop
-end if
-
-if (plat > 90. .OR. plat < -90) then
-  write(0,*) ' '
-  write(0,*) 'User-specified latitude exceeded dimension'
-  write(0,*) ' '
-  stop
-end if
-
-!--------------------
-
-baseyr = 1871
-
-call getarg(3,timestring)
-
-call parsecoords(timestring,timevals)
-
-startyr = nint(timevals%minlon)
-calcyrs = nint(timevals%minlat)
-
-t0 = 1 + 12 * (startyr - baseyr)
-t1 = t0 + 12 * calcyrs - 1
-
-nt = t1 - t0 + 1
-
-!--------------------
-
-len = floor(real(ilen) / nproc)
-
-remainder = ilen - (len * nproc)
-
-n = 1
-do i = 1, nproc
-
-  srt(n) = (i-1) * len + 1
-  cnt(n) = len
-
-  if (i == nproc) then
-
-    cnt(n) = len + remainder
-
-  end if
-
-  n = n + 1
-
-end do
-
-!--------------------
-
-call getarg(4, outfile)
-
-
-end subroutine startmpi
 
 !-------------------------------------------------------
 
 subroutine infotobyte(info,srt,cnt,ob)
 
-type(infompi)              , intent(in)    :: info
+type(mpivars)              , intent(in)    :: info
 integer(i4)  , dimension(:), intent(in)    :: srt
 integer(i4)  , dimension(:), intent(in)    :: cnt
 integer(i1)  , dimension(:), intent(inout) :: ob
@@ -301,7 +169,7 @@ end subroutine infotobyte
 
 subroutine bytetoinfo(info,srt,cnt,ob)
 
-type(infompi)              , intent(inout)    :: info
+type(mpivars)              , intent(inout)    :: info
 integer(i4)  , dimension(:), intent(inout)    :: srt
 integer(i4)  , dimension(:), intent(inout)    :: cnt
 integer(i1)  , dimension(:), intent(in)       :: ob

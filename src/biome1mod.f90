@@ -16,13 +16,13 @@ integer(i4), parameter :: npfts = 13
 
 type biomedata
 
-  real(sp) :: tcm       ! Temperature of coldest month in year (degC)
-  real(sp) :: twm       ! Temperature of warmest month in year (degC)
-  real(sp) :: gdd5      ! Growing degree days above 5 degC
-  real(sp) :: gdd0      ! Growing degree days above 0 degC
-  real(sp) :: alpha     ! Annual mean of alpha (AET/PET ratio)
-  real(sp) :: aprec     ! Annual sum of precipitation (mm)
-  real(sp) :: apet      ! Annual sum potential evapotranspiration (mm)
+  real(dp) :: tcm       ! Temperature of coldest month in year (degC)
+  real(dp) :: twm       ! Temperature of warmest month in year (degC)
+  real(dp) :: gdd5      ! Growing degree days above 5 degC
+  real(dp) :: gdd0      ! Growing degree days above 0 degC
+  real(dp) :: alpha     ! Annual mean of alpha (AET/PET ratio)
+  real(dp) :: aprec     ! Annual sum of precipitation (mm)
+  real(dp) :: apet      ! Annual sum potential evapotranspiration (mm)
 
   integer(i4) :: ndyear   ! Number of days in the year
 
@@ -41,13 +41,13 @@ integer(i4), allocatable, dimension(:) :: biome_mean
 type pftparameters
 
   character(80) :: name
-  real(sp) :: tcmax
-  real(sp) :: tcmin
-  real(sp) :: gdd5min
-  real(sp) :: gdd0min
-  real(sp) :: twmin
-  real(sp) :: almin
-  real(sp) :: almax
+  real(dp) :: tcmax
+  real(dp) :: tcmin
+  real(dp) :: gdd5min
+  real(dp) :: gdd0min
+  real(dp) :: twmin
+  real(dp) :: almin
+  real(dp) :: almax
 
 end type pftparameters
 
@@ -137,16 +137,16 @@ integer(i4), intent(in) :: grid
 
 integer(i4), dimension(2) :: biome
 
-real(sp) :: tcm       ! Temperature of coldest month in year (degC)
-real(sp) :: twm       ! Temperature of warmest month in year (degC)
-real(sp) :: gdd5      ! Growing degree days above 5 degC
-real(sp) :: gdd0      ! Growing degree days above 0 degC
-real(sp) :: alpha     ! Annual mean of alpha (AET/PET ratio)
-real(sp) :: aprec     ! Annual sum of precipitation (mm)
-real(sp) :: apet      ! Annual sum potential evapotranspiration (mm)
+real(dp) :: tcm       ! Temperature of coldest month in year (degC)
+real(dp) :: twm       ! Temperature of warmest month in year (degC)
+real(dp) :: gdd5      ! Growing degree days above 5 degC
+real(dp) :: gdd0      ! Growing degree days above 0 degC
+real(dp) :: alpha     ! Annual mean of alpha (AET/PET ratio)
+real(dp) :: aprec     ! Annual sum of precipitation (mm)
+real(dp) :: apet      ! Annual sum potential evapotranspiration (mm)
 
 ! Parameters
-real(sp),    parameter :: ud = -9999.
+real(dp),    parameter :: ud = -9999.
 integer(i4), parameter :: tests = 7
 
 ! Local variables
@@ -363,16 +363,16 @@ integer(i4), intent(in) :: grid
 
 integer(i4), dimension(2) :: biome
 
-real(sp) :: tcm       ! Temperature of coldest month in year (degC)
-real(sp) :: twm       ! Temperature of warmest month in year (degC)
-real(sp) :: gdd5      ! Growing degree days above 5 degC
-real(sp) :: gdd0      ! Growing degree days above 0 degC
-real(sp) :: alpha     ! Annual mean of alpha (AET/PET ratio)
-real(sp) :: aprec     ! Annual sum of precipitation (mm)
-real(sp) :: apet      ! Annual sum potential evapotranspiration (mm)
+real(dp) :: tcm       ! Temperature of coldest month in year (degC)
+real(dp) :: twm       ! Temperature of warmest month in year (degC)
+real(dp) :: gdd5      ! Growing degree days above 5 degC
+real(dp) :: gdd0      ! Growing degree days above 0 degC
+real(dp) :: alpha     ! Annual mean of alpha (AET/PET ratio)
+real(dp) :: aprec     ! Annual sum of precipitation (mm)
+real(dp) :: apet      ! Annual sum potential evapotranspiration (mm)
 
 ! Parameters
-real(sp),    parameter :: ud = -9999.
+real(dp),    parameter :: ud = -9999.
 integer(i4), parameter :: tests = 7
 
 ! Local variables

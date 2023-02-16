@@ -56,16 +56,18 @@ contains
 
 !-----------------------------------------------------------------------
 
-subroutine genrndstate(grid)
+subroutine initrndstate(lon,lat,georndst)
 
 ! Generate a geohash randomstate speicifc to the gridcell
 
 use geohashmod,    only : geohash
-use statevarsmod,    only : lon,lat,indx,srt
+! use statevarsmod,    only : lon,lat,indx,srt
 
 implicit none
 
-integer(i4), intent(in) :: grid
+real(dp),          intent(in) :: lat
+real(dp),          intent(in) :: lon
+type(randomstate), intent(inout) :: georndst
 
 integer(i4) :: ll
 integer(i4) :: lon_loc
@@ -74,26 +76,26 @@ integer(i4), dimension(2) :: ll_loc
 
 !---------------------
 
-ll = srt(1) + (grid - 1)   ! Get the current index value
+! ll = srt(1) + (grid - 1)   ! Get the current index value
+!
+! !---------------------
+!
+! ! Get the value of lon and lat from index dimension
+! ll_loc = findloc(indx, ll)
+!
+! lon_loc = ll_loc(1)
+! lat_loc = ll_loc(2)
 
 !---------------------
 
-! Get the value of lon and lat from index dimension
-ll_loc = findloc(indx, ll)
+call ran_seed(geohash(lon,lat), georndst)    ! Get the geohash dependent randomstate
 
-lon_loc = ll_loc(1)
-lat_loc = ll_loc(2)
-
-!---------------------
-
-call ran_seed(geohash(lon(lon_loc),lat(lat_loc)), georndst(grid))    ! Get the geohash dependent randomstate
-
-call ran_seed(ranu(georndst(grid)), georndst(grid))     ! Randomize the geohash derived state
+call ran_seed(ranu(georndst), georndst)     ! Randomize the geohash derived state
 
 ! call ran_seed(-1, georndst(grid))    ! Get the geohash dependent randomstate constant for HKbaseclim
 
 
-end subroutine genrndstate
+end subroutine initrndstate
 
 !-----------------------------------------------------------------------
 

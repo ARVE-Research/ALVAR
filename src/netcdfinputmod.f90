@@ -1,9 +1,6 @@
 module netcdfinputmod
 
 use parametersmod, only : i2,i4,sp,dp
-use statevarsmod,    only : xlen,ylen,ilen,tlen,lon,lat,indx,time,elev,srt,cnt,cntt,p0,p1,monvars,soilvars
-use soilstatemod,  only : nl,zpos
-use outputmod,     only : infompi
 use errormod,      only : ncstat,netcdf_err
 use getdatamod,    only : readdata
 use netcdf
@@ -11,31 +8,39 @@ use mpi
 
 implicit none
 
-character(100), parameter :: soilfile = './soil30m_list-formatted.nc'
-character(100), parameter :: topofile = './world_slope_1800arcsec_list-formatted.nc'
-character(100), parameter :: LAIfile  = './LAI_mean_monthly_1981-2015_halfdeg_list-formatted.nc'
-! character(100), parameter :: topofile = '/home/leolaio/grid2list_hktopo/topofile_integrated_list-formatted.nc'
 
 contains
 
 !---------------------------------------------------------------------
 
-subroutine metdatainput(info)
+subroutine metdatainput(infile,gridcount,srt,cnt,cntt,p0,p1,xlen,ylen,tlen, &
+                        inlon,inlat,time,indx,elev,invars)
 
 ! Read in the full array (all months for all gridcells) of monthly variables from netcdf file
+use parametersmod, only : i2,i4,sp,dp
+use statevarsmod,  only : in_metvars
+use getdatamod,    only : readdata
 
-type(infompi), target, intent(in) :: info
+implicit none
 
-character(100), pointer :: infile
-integer :: ifid
-integer :: dimid
-integer :: varid
+character(200),                                intent(in)    :: infile
+integer(i4),                                   intent(in)    :: gridcount
+integer(i4),                   dimension(2),   intent(in)    :: srt
+integer(i4),                   dimension(2),   intent(in)    :: cnt
+integer(i4),                                   intent(in)    :: cntt
+integer(i4),                                   intent(in)    :: p0
+integer(i4),                                   intent(in)    :: p1
+integer(i4),                                   intent(inout) :: xlen
+integer(i4),                                   intent(inout) :: ylen
+integer(i4),                                   intent(inout) :: tlen
+real(dp),         allocatable, dimension(:),   intent(inout) :: inlon
+real(dp),         allocatable, dimension(:),   intent(inout) :: inlat
+real(dp),         allocatable, dimension(:),   intent(inout) :: time
+integer(i4),      allocatable, dimension(:,:), intent(inout) :: indx
+real(sp),                      dimension(:),   intent(inout) :: elev
+type(in_metvars),              dimension(:),   intent(inout) :: invars
 
-integer(i4) :: gridcount
-integer(i4), dimension(2) :: start
-integer(i4), dimension(2) :: count
-
-! monthly input driver variables
+! Monthly input driver variables
 real(sp), allocatable, dimension(:,:) :: tmp        ! mean monthly temperature (degC)
 real(sp), allocatable, dimension(:,:) :: dtr        ! mean monthly diurnal temperature range (degC)
 real(sp), allocatable, dimension(:,:) :: pre        ! total monthly precipitation (mm)
@@ -43,19 +48,16 @@ real(sp), allocatable, dimension(:,:) :: wet        ! number of days in the mont
 real(sp), allocatable, dimension(:,:) :: cld        ! mean monthly cloud cover (fraction)
 real(sp), allocatable, dimension(:,:) :: wnd        ! mean monthly 10m windspeed (m s-1)
 
+integer(i4) :: ilen
 integer(i4), allocatable, dimension(:) :: var_in
 real(sp)    :: scale_factor
 real(sp)    :: add_offset
 integer(i2) :: missing_value
 
+integer :: ifid
+integer :: dimid
+integer :: varid
 integer :: i
-
-
-!----------------------------------------------------
-! Pointers to mpi derived type variables
-infile => info%infile
-
-gridcount = cnt(1)
 
 ! -----------------------------------------------------
 ! INPUT: Read dimension IDs and lengths of dimensions
@@ -63,67 +65,66 @@ gridcount = cnt(1)
 ncstat = nf90_open(infile,nf90_nowrite,ifid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)           ! Open netCDF-file (inpput file name, no writing rights, assigned file number)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)      ! Check for errors (after every step)
 
-ncstat = nf90_inq_dimid(ifid,'lon',dimid)              ! get dimension ID from dimension 'lon' in the input file
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inquire_dimension(ifid,dimid,len=xlen)   ! get dimension name and length from input file for dimension previously inquired
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_dimid(ifid,'lat',dimid)              ! get dimension ID from dimension 'lon' in the input file
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inquire_dimension(ifid,dimid,len=ylen)   ! get dimension name and length from input file for dimension previously inquired
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
+! ncstat = nf90_inq_dimid(ifid,'lon',dimid)              ! get dimension ID from dimension 'lon' in the input file
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inquire_dimension(ifid,dimid,len=xlen)   ! get dimension name and length from input file for dimension previously inquired
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_dimid(ifid,'lat',dimid)              ! get dimension ID from dimension 'lon' in the input file
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inquire_dimension(ifid,dimid,len=ylen)   ! get dimension name and length from input file for dimension previously inquired
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
 ncstat = nf90_inq_dimid(ifid,'index',dimid)             ! get dimension ID from dimension 'index' in the input file
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 ncstat = nf90_inquire_dimension(ifid,dimid,len=ilen)   ! get dimension name and length from input file for dimension previously inquired
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_dimid(ifid,'time',dimid)             ! Get dimension ID for time
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inquire_dimension(ifid,dimid,len=tlen)   ! Get length of dimension 'time' and assign it to variable tlen
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-! ----------------------------------------------------
-! Read variable IDs and values
-
-allocate(lon(xlen))         ! Allocate length to longitude array
-allocate(lat(ylen))         ! Allocate length to latitude array
-allocate(time(tlen))        ! Allocate length to time array
-allocate(indx(xlen,ylen))   ! Allocate length to index array
-
-ncstat = nf90_inq_varid(ifid,"lon",varid)                ! Get variable ID for longitude
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_get_var(ifid,varid,lon)                    ! Get variable values for longitude
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_varid(ifid,"lat",varid)                ! Get variable ID for latitude
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_get_var(ifid,varid,lat)                    ! Get variable values for latitude
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_varid(ifid,"index",varid)               ! Get variable ID for index
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_get_var(ifid,varid,indx)                    ! Get variable values for index
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_inq_varid(ifid,"time",varid)               ! Get variable ID for time
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-ncstat = nf90_get_var(ifid,varid,time)                   ! Get variable values for time
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_dimid(ifid,'time',dimid)             ! Get dimension ID for time
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inquire_dimension(ifid,dimid,len=tlen)   ! Get length of dimension 'time' and assign it to variable tlen
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ! ----------------------------------------------------
+! ! Read variable IDs and values
+!
+! allocate(inlon(xlen))         ! Allocate length to longitude array
+! allocate(inlat(ylen))         ! Allocate length to latitude array
+! allocate(time(tlen))        ! Allocate length to time array
+! allocate(indx(xlen,ylen))   ! Allocate length to index array
+!
+! ncstat = nf90_inq_varid(ifid,"lon",varid)                ! Get variable ID for longitude
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_get_var(ifid,varid,inlon)                  ! Get variable values for longitude
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_varid(ifid,"lat",varid)                ! Get variable ID for latitude
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_get_var(ifid,varid,inlat)                  ! Get variable values for latitude
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_varid(ifid,"index",varid)              ! Get variable ID for index
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_get_var(ifid,varid,indx)                   ! Get variable values for index
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_inq_varid(ifid,"time",varid)               ! Get variable ID for time
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+!
+! ncstat = nf90_get_var(ifid,varid,time)                   ! Get variable values for time
+! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 ! ----------------------------------------------------
 ! Read in elevation data from input file
 
 allocate(var_in(ilen))
-allocate(elev(ilen))      ! Allocate length to index array
 
 ncstat = nf90_inq_varid(ifid,'elv',varid)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
@@ -148,15 +149,12 @@ end where
 
 ! ----------------------------------------------------
 ! Read in variables from netcdf file by each gridcell
-srt = srt
-cnt = cnt
-
-allocate(tmp(cnt(1),cntt))
-allocate(dtr(cnt(1),cntt))
-allocate(pre(cnt(1),cntt))
-allocate(wet(cnt(1),cntt))
-allocate(cld(cnt(1),cntt))
-allocate(wnd(cnt(1),cntt))
+allocate(tmp(gridcount,cntt))
+allocate(dtr(gridcount,cntt))
+allocate(pre(gridcount,cntt))
+allocate(wet(gridcount,cntt))
+allocate(cld(gridcount,cntt))
+allocate(wnd(gridcount,cntt))
 
 call readdata(ifid,'tmp',srt,cnt,tmp(:,p0:p1))
 call readdata(ifid,'dtr',srt,cnt,dtr(:,p0:p1))
@@ -164,6 +162,9 @@ call readdata(ifid,'pre',srt,cnt,pre(:,p0:p1))
 call readdata(ifid,'wet',srt,cnt,wet(:,p0:p1))
 call readdata(ifid,'cld',srt,cnt,cld(:,p0:p1))
 call readdata(ifid,'wnd',srt,cnt,wnd(:,p0:p1))
+
+ncstat = nf90_close(ifid)
+if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
 ! write(0,*) 'ok read data', xlen, ylen, tlen, ilen, cnt
 
@@ -202,36 +203,35 @@ end where
 ! Copy monthly time series into the mon_metvar derived type structure
 do i = 1, cnt(1)
 
-  monvars(i)%tmp(:) = tmp(i,:)
-  monvars(i)%dtr(:) = dtr(i,:)
-  monvars(i)%pre(:) = pre(i,:)
-  monvars(i)%wet(:) = wet(i,:)
-  monvars(i)%cld(:) = cld(i,:)
-  monvars(i)%wnd(:) = wnd(i,:)
+  invars(i)%tmp(:) = tmp(i,:)
+  invars(i)%dtr(:) = dtr(i,:)
+  invars(i)%pre(:) = pre(i,:)
+  invars(i)%wet(:) = wet(i,:)
+  invars(i)%cld(:) = cld(i,:)
+  invars(i)%wnd(:) = wnd(i,:)
 
 end do
-
-ncstat = nf90_close(ifid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
 
 end subroutine metdatainput
 
 !---------------------------------------------------------------------
 
-subroutine soildatainput(info)
+subroutine soildatainput(soilfile,gridstart,gridcount,soilvars)
 
 ! Read in the full array all gridcells and all layers, of soil variales (sand, clay and cfvo composition)
 
-type(infompi), target, intent(in) :: info
+use parametersmod, only : i2,i4,sp,dp
+use statevarsmod,  only : soil_vars
+use statevarsmod,  only : nl
 
-integer :: sfid
-integer :: dimid
-integer :: varid
+implicit none
 
-integer(i4) :: gridstart
-integer(i4) :: gridcount
+character(100),                intent(in)    :: soilfile
+integer(i4),                   intent(in)    :: gridstart
+integer(i4),                   intent(in)    :: gridcount
+type(soil_vars), dimension(:), intent(inout) :: soilvars
 
+! Local variables
 integer(i2), allocatable, dimension(:,:) :: var_in
 real(sp),    allocatable, dimension(:,:) :: values
 
@@ -239,12 +239,10 @@ real(sp)    :: scale_factor
 real(sp)    :: add_offset
 integer(i2) :: missing_value
 
+integer :: sfid
+integer :: dimid
+integer :: varid
 integer :: i
-
-!------
-
-gridstart = srt(1)
-gridcount = cnt(1)
 
 ! -----------------------------------------------------
 ! INPUT: Read in layer depth variable (zpos)
@@ -361,22 +359,19 @@ end subroutine soildatainput
 
 !---------------------------------------------------------------------
 
-subroutine topodatainput(info)
+subroutine topodatainput(topofile,gridstart,gridcount,topovars,validcell)
 
 ! Read in the full array all gridcells and all layers, of topographic variales (slope and aspect)
 
-use statevarsmod, only : topovars
+use statevarsmod, only : topo_vars
 
 implicit none
 
-type(infompi), target, intent(in) :: info
-
-integer :: tfid
-integer :: dimid
-integer :: varid
-
-integer(i4) :: gridstart
-integer(i4) :: gridcount
+character(100),                intent(in)    :: topofile
+integer(i4),                   intent(in)    :: gridstart
+integer(i4),                   intent(in)    :: gridcount
+type(topo_vars), dimension(:), intent(inout) :: topovars
+logical,         dimension(:), intent(inout) :: validcell
 
 integer(i2), allocatable, dimension(:) :: var_in
 real(sp),    allocatable, dimension(:) :: var_in_r
@@ -386,12 +381,10 @@ real(sp)    :: scale_factor
 real(sp)    :: add_offsetworld_slope_1800arcsec
 integer(i2) :: missing_value
 
+integer :: tfid
+integer :: dimid
+integer :: varid
 integer :: i
-
-!------
-
-gridstart = srt(1)
-gridcount = cnt(1)
 
 ! -----------------------------------------------------
 ! OPEN file
@@ -420,7 +413,8 @@ if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 where (var_in_r /= missing_value)
   values = var_in_r !* scale_factor
 elsewhere
-  values = -9999.
+  values    = -9999.
+  validcell = .false.
 end where
 
 do i = 1, gridcount
@@ -552,21 +546,23 @@ end subroutine topodatainput
 
 !---------------------------------------------------------------------
 
-subroutine LAIdatainput(info)
+subroutine LAIdatainput(LAIfile,gridcount,srt,cnt,ndyear,vegvars)
 
 ! Read in the full array all gridcells and all layers, of soil variales (sand, clay and cfvo composition)
 
+use statevarsmod, only : veg_vars
 use utilitiesmod, only : getmonth
-use statevarsmod,   only : vegvars,ndyear
 
-type(infompi), target, intent(in) :: info
+implicit none
 
-integer :: ifid
-integer :: dimid
-integer :: varid
+character(100),                intent(in)    :: LAIfile
+integer(i4),                   intent(in)    :: gridcount
+integer(i4),     dimension(2), intent(in)    :: srt
+integer(i4),     dimension(2), intent(in)    :: cnt
+integer(i4),                   intent(in)    :: ndyear
+type(veg_vars),  dimension(:), intent(inout) :: vegvars
 
 integer(i4) :: gridstart
-integer(i4) :: gridcount
 
 real(sp), allocatable, dimension(:,:) :: var_in
 real(sp), allocatable, dimension(:,:) :: values
@@ -579,13 +575,15 @@ integer(i4) :: month
 integer(i4) :: sday
 integer(i4) :: eday
 
+integer :: ifid
+integer :: dimid
+integer :: varid
 integer :: i
 integer :: d
 
 !------
 
 gridstart = srt(1)
-gridcount = cnt(1)
 
 ! -----------------------------------------------------
 ! INPUT: Read in layer depth variable (zpos)

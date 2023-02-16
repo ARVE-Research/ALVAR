@@ -6,7 +6,7 @@ use parametersmod, only : i2,i4,sp,dp,missing_sp,Tfreeze
 
 implicit none
 
-public :: soilprep
+public :: initsoil
 
 ! private :: fbulk
 ! private :: fRock
@@ -15,22 +15,6 @@ public :: soilprep
 ! private :: fTsat
 ! private :: fPsat
 ! private :: fBexp
-
-! Number of soil layers
-integer(i4), parameter               :: nl = 6
-
-! Soil layer thickness
-real(sp),    parameter, dimension(6) :: dz = [0.05, 0.1, 0.15, 0.3, 0.4, 1.0]
-real(sp),    parameter, dimension(6) :: dzmm = dz * 1.e3
-
-! Midpoint z position (depth) of soil layer
-real(sp),    parameter, dimension(6) :: zpos = [0.025, 0.1, 0.225, 0.45, 0.8, 1.5]
-real(sp),    parameter, dimension(6) :: zposmm = zpos * 1.e3
-
-! Soil layer interface z position (depth), positive downwards (dim = nl+1, including surface and column bottom interface)
-real(sp),    parameter, dimension(7) :: zipos = [0., 0.05, 0.15, 0.3, 0.6, 1.0, 2.0]
-real(sp),    parameter, dimension(7) :: ziposmm = zipos * 1.e3
-
 
 !-------------------------
 
@@ -75,72 +59,71 @@ real(dp), parameter :: Kair = 0.0243_dp                 ! Thermal conductivity o
 
 contains
 
-subroutine soilprep(grid)
+subroutine initsoil(dz,dzmm,zpos,zposmm,zipos,ziposmm,sand0,clay0,cfvo0,OrgM,rock,bulk, &
+                    Vsand,Vclay,Vsilt,VOrgM,awc,Ksat,Tsat,Tfield,Twilt,Psat,Bexp, &
+                    Csolid,Ksolid,Kdry,Wliq,Wice,Tsoil,Tsoiln,Tliq,Tice,Psi,validcell)
 
 ! Subroutine to calculate soil physical properties from sand, clay and cfvo soildata input (soil grid)
 ! Code copied (and combined) from LPJ-LMFire (simplesoilmod.f90) and ARVE-DGVM (init_model_state.f90)
 ! by Leo O Lai (Jul 2021)
 
-use statevarsmod, only : soilvars
+use parametersmod, only : i4,sp,missing_sp,Tfreeze
+use statevarsmod,  only : nl,ns
 
 implicit none
 
-integer(i4), intent(in) :: grid
+real(sp), dimension(ns:nl),   intent(inout) :: dz              ! Snow/soil layer thickness (m)
+real(sp), dimension(ns:nl),   intent(inout) :: dzmm            ! Snow/soil layer thickness (mm)
+real(sp), dimension(ns:nl),   intent(inout) :: zpos            ! Midpoint z position (depth) of soil layer
+real(sp), dimension(ns:nl),   intent(inout) :: zposmm          ! zpos in mm
+real(sp), dimension(ns:nl+1), intent(inout) :: zipos           ! Snow/soil layer interface z position (depth), positive downwards (dim = nl+1, including surface and column bottom interface)
+real(sp), dimension(ns:nl+1), intent(inout) :: ziposmm         ! zipos in mm
+real(sp), dimension(:),       intent(in)    :: sand0           ! Sand content by mass (percent)
+real(sp), dimension(:),       intent(in)    :: clay0           ! Clay content by mass (percent)
+real(sp), dimension(:),       intent(in)    :: cfvo0           ! Course fragment content by volume (percent) --> Vcf variable in ARVE-DGVM
+real(sp), dimension(:),       intent(inout) :: OrgM            ! Organic matter content by mass (percent)
+real(sp), dimension(:),       intent(inout) :: rock            ! Course fragment content by mass (fraction)
+real(sp), dimension(:),       intent(inout) :: bulk            ! Soil bulk density (kg m-3)
+real(sp), dimension(:),       intent(inout) :: Vsand           ! Sand content by volume (fraction)
+real(sp), dimension(:),       intent(inout) :: Vclay           ! Clay content by volume (fraction)
+real(sp), dimension(:),       intent(inout) :: Vsilt           ! Silt content by volume (fraction)
+real(sp), dimension(:),       intent(inout) :: VOrgM           ! Organic matter content by volume (fraction)
+real(sp), dimension(:),       intent(inout) :: awc             ! Soil water holding capcity / available water content (mm)
+real(sp), dimension(ns:nl),       intent(inout) :: Ksat            ! Soil water saturated conductivity (mm s-1)
+real(sp), dimension(ns:nl),       intent(inout) :: Tsat            ! Soil water volumetric water content at saturation (fraction / m3 m-3)
+real(sp), dimension(:),       intent(inout) :: Tfield          ! Soil water volumetric content at field capacity (Psi = -33 kPa)   (fraction / m3 m-3)
+real(sp), dimension(:),       intent(inout) :: Twilt           ! Soil water volumetric content at wilting point (Psi = -1500 kPa)   (fraction / m3 m-3)
+real(sp), dimension(ns:nl),       intent(inout) :: Psat            ! Soil water matric potential at saturation (mm)
+real(sp), dimension(ns:nl),       intent(inout) :: Bexp            ! Soil water B exponent used in the Brooks & Corey Pedotransfer Functions
+real(sp), dimension(nl),       intent(inout) :: Csolid          ! Soil solids volumetric heat capcity at layer midpoint (J m-3 K-1)
+real(sp), dimension(nl),       intent(inout) :: Ksolid          ! Soil mineral thermal conductivity at layer midpoint (W m-1 K-1)
+real(sp), dimension(nl),       intent(inout) :: Kdry            ! Soil thermal conductivity of dry natural soil (W m-1 K-1)
+real(sp), dimension(ns:nl),       intent(inout) :: Wliq            ! Soil liquid water content at layer midpoint (mm)
+real(sp), dimension(ns:nl),       intent(inout) :: Wice            ! Soil ice content at layer midpoint (mm)
+real(sp), dimension(ns:nl),       intent(inout) :: Tsoil           ! Soil temperature (K)
+real(sp), dimension(ns:nl),       intent(inout) :: Tsoiln          ! Soil temperature for precious timestep (K)
+real(sp), dimension(ns:nl),       intent(inout) :: Tliq            ! Soil volumetric water content (fraction / m3 m-3) / Fractional soil water content
+real(sp), dimension(ns:nl),       intent(inout) :: Tice            ! Soil volumetric ice content (fraction / m3 m-3) / Fraction soil ice content
+real(sp), dimension(ns:nl),       intent(inout) :: Psi             ! Soil water potential
+logical,                      intent(inout) :: validcell
 
-! type(soildata), intent(inout) :: soil  !state variables sent back out with MPI
-! real(sp), dimension(:), intent(out) :: soilpar
-
-integer(i4) :: l
-integer(i4) :: it
-
-integer(i4) :: soiltype
+! Local variables
+logical, allocatable, dimension(:) :: valid
 
 real(sp) :: sand
 real(sp) :: clay
 real(sp) :: cfvo
 real(sp) :: OM    !(mass %)
 
+integer(i4) :: l
+integer(i4) :: it
+
+integer(i4) :: soiltype
+
 real(sp) :: silt
-! real(sp) :: bulk1
-! real(sp) :: Tsat1
 real(sp) :: T33       ! Water content at field capacity
 real(sp) :: T1500     ! Wilting point soil content
 
-logical, allocatable, dimension(:) :: valid
-
-! real(sp), pointer, dimension(:) :: zpos
-logical, pointer :: validcell
-
-real(sp), pointer, dimension(:) :: bulk
-real(sp), pointer, dimension(:) :: rock  ! Course fragment content by mass (percent)
-real(sp), pointer, dimension(:) :: OrgM  !(g m-2)
-
-real(sp), pointer, dimension(:) :: Vsand
-real(sp), pointer, dimension(:) :: Vclay
-real(sp), pointer, dimension(:) :: Vsilt
-real(sp), pointer, dimension(:) :: VOrgM
-
-real(sp), pointer, dimension(:) :: whc
-real(sp), pointer, dimension(:) :: Ksat
-real(sp), pointer, dimension(:) :: Tsat
-real(sp), pointer, dimension(:) :: Tfield
-real(sp), pointer, dimension(:) :: Twilt
-real(sp), pointer, dimension(:) :: Psat
-real(sp), pointer, dimension(:) :: Bexp
-
-real(sp), pointer, dimension(:) :: Csolid
-real(sp), pointer, dimension(:) :: Ksolid
-real(sp), pointer, dimension(:) :: Kdry
-
-real(sp), pointer, dimension(:) :: Wliq
-real(sp), pointer, dimension(:) :: Wice
-real(sp), pointer, dimension(:) :: Tsoil
-real(sp), pointer, dimension(:) :: Tsoiln
-real(sp), pointer, dimension(:) :: Tliq
-real(sp), pointer, dimension(:) :: Tice
-real(sp), pointer, dimension(:) :: Psi
-
-!local variables
 real(sp) :: densp
 real(sp) :: Vtotal
 real(sp), dimension(1:nl) :: Kdrysolid    !soil dry mineral thermal conductivity at layer midpoint (W m-1 K-1)
@@ -156,34 +139,23 @@ real(sp) :: dzOM      !interlayer transport of SOM (g m-2)
 real(sp) :: dzx       !excess change in top layer thickness
 
 !-------------------------
+! Initiate soil layer thickness and vertical positions (first 5 layers are snow)
+! Soil layer thickness
+dz   = [0., 0., 0., 0., 0., 0.05, 0.1, 0.15, 0.3, 0.4, 1.0]
+dzmm = dz * 1.e3
 
-validcell => soilvars(grid)%validcell
+! Midpoint z position (depth) of soil layer
+zpos   = [0., 0., 0., 0., 0., 0.025, 0.1, 0.225, 0.45, 0.8, 1.5]
+zposmm = zpos * 1.e3
 
-bulk   => soilvars(grid)%bulk
-rock   => soilvars(grid)%rock
-OrgM   => soilvars(grid)%OrgM
-Vsand  => soilvars(grid)%Vsand
-Vclay  => soilvars(grid)%Vclay
-Vsilt  => soilvars(grid)%Vsilt
-VOrgM  => soilvars(grid)%VOrgM
-Csolid => soilvars(grid)%Csolid
-Ksolid => soilvars(grid)%Ksolid
-Kdry   => soilvars(grid)%Kdry
+! Soil layer interface z position (depth), positive downwards (dim = nl+1, including surface and column bottom interface)
+zipos   = [0., 0., 0., 0., 0., 0., 0.05, 0.15, 0.3, 0.6, 1.0, 2.0]
+ziposmm = zipos * 1.e3
 
-whc    => soilvars(grid)%whc
-Ksat   => soilvars(grid)%Ksat
-Tsat   => soilvars(grid)%Tsat
-Tfield => soilvars(grid)%Tfield
-Twilt  => soilvars(grid)%Twilt
-Psat   => soilvars(grid)%Psat
-Bexp   => soilvars(grid)%Bexp
-Wliq   => soilvars(grid)%Wliq
-Wice   => soilvars(grid)%Wice
-Tsoil  => soilvars(grid)%Tsoil
-Tsoiln => soilvars(grid)%Tsoiln
-Tliq   => soilvars(grid)%Tliq
-Tice   => soilvars(grid)%Tice
-Psi    => soilvars(grid)%Psi
+Tliq = 0.
+Tsat = 0.
+Wliq = 0.
+Wice = 0.
 
 !-------------------------
 
@@ -199,10 +171,10 @@ soiltype = 1
 
 bulkloop : do l = 1, nl
 
-  sand  = soilvars(grid)%sand(l)
-  clay  = soilvars(grid)%clay(l)
-  cfvo  = soilvars(grid)%cfvo(l)
-  OM    = soilvars(grid)%OrgM(l)
+  sand  = sand0(l)
+  clay  = clay0(l)
+  cfvo  = cfvo0(l)
+  OM    = OrgM(l)
 
   silt = 100. - (sand + clay)
 
@@ -276,8 +248,8 @@ bulkloop : do l = 1, nl
   Tfield(l) = T33                                 ! fraction / m3 m-3
   Twilt(l)  = T1500                               ! fraction / m3 m-3
 
-  ! Update layer-integrated WHC = Tfield - Twilt
-  whc(l) = 1000. * dz(l) * (T33 - T1500)           ! mm
+  ! Update layer-integrated awc = Tfield - Twilt
+  awc(l) = 1000. * dz(l) * (T33 - T1500)           ! mm
 
   ! Calculate hydraulic condictivity at saturation
   Ksat(l) = fKsat(Tsat(l),T33,T1500)
@@ -290,11 +262,11 @@ bulkloop : do l = 1, nl
   ! NOTE: Reduce the sand,silt,clay mass percent by the coarse fragment mass percent (while retaining the relative weight percents
   Bexp(l) = fBexp(clay*(1.-rock(l)), silt*(1.-rock(l)), sand*(1.-rock(l)), rock(l), OrgM(l))
 
-  ! if (rock(l) /= 0.) print *, it, Tsat(l), Tfield(l), whc(l)
+  ! if (rock(l) /= 0.) print *, it, Tsat(l), Tfield(l), awc(l)
 
 end do bulkloop
 
-! if (rock(1) /= 0.) print *, sum(Tsat(1:5)) / 5., sum(Tfield(1:5)) / 5., sum(Twilt(1:5)) / 5., sum(whc(1:5)) / 1000.
+! if (rock(1) /= 0.) print *, sum(Tsat(1:5)) / 5., sum(Tfield(1:5)) / 5., sum(Twilt(1:5)) / 5., sum(awc(1:5)) / 1000.
 
 !-------------------------
 
@@ -303,14 +275,17 @@ conductivityloop : do l = 1, nl
 
   !inital presets
   Tsoil(l) = Tfreeze + 5. !set to 5 deg. C.
-  Tsoiln(l) = Tfreeze + 5.05
+  Tsoiln(l) = Tfreeze + 5.5
+
+  ! Tsoil(l) = Tfreeze - 40. !set to 5 deg. C.
+  ! Tsoiln(l) = Tfreeze - 40.5
 
   !------
 
   OM   = 1.
-  sand = soilvars(grid)%sand(l)
-  clay = soilvars(grid)%clay(l)
-  cfvo = soilvars(grid)%cfvo(l) * 0.01      ! Convert from percent to fraction
+  sand = sand0(l)
+  clay = clay0(l)
+  cfvo = cfvo0(l) * 0.01      ! Convert from percent to fraction
   silt = 100. - (sand + clay)
 
   !find the volume fractions of the soil consituents.
@@ -386,7 +361,7 @@ end do hydroloop
 !-------------------------
 
 ! assign a typical rock value for non-soil layers
-! whc  = 0.03
+! awc  = 0.03
 ! Ksat = 1.e-3
 ! valid = .true.
 
@@ -396,7 +371,7 @@ if (.not. valid(1)) validcell = .false.
 
 if (.not. validcell) then
 
-  whc  = missing_sp
+  awc  = missing_sp
   Ksat = missing_sp
   Tsat = missing_sp
   Psat = missing_sp
@@ -425,6 +400,8 @@ if (.not. validcell) then
 
 end if
 
+! print *, awc, Tsat*dz*pliq, Ksat*3600
+
 !-------------------------
 
 ! !saturated conductivity (mm h-1)
@@ -432,18 +409,18 @@ end if
 ! soilpar(2) = sum(Ksat(2:nl))/count(valid(2:nl))
 !
 ! !water holding capacity (mm)
-! soilpar(3) = whc(1)
-! soilpar(4) = sum(whc(2:nl),mask=valid(2:nl)) + whc(nl) / dz(nl) * 2. !mm/m layer add 2 more meters like LPJ2
+! soilpar(3) = awc(1)
+! soilpar(4) = sum(awc(2:nl),mask=valid(2:nl)) + awc(nl) / dz(nl) * 2. !mm/m layer add 2 more meters like LPJ2
 !
-! soilpar(5) = 0.2    !thermal diffusivity (mm2/s) at wilting point (0% WHC)
-! soilpar(6) = 0.650  !thermal diffusivity (mm2/s) at 15% WHC
-! soilpar(7) = 0.4    !thermal diffusivity at field capacity (100% WHC)
+! soilpar(5) = 0.2    !thermal diffusivity (mm2/s) at wilting point (0% awc)
+! soilpar(6) = 0.650  !thermal diffusivity (mm2/s) at 15% awc
+! soilpar(7) = 0.4    !thermal diffusivity at field capacity (100% awc)
 
-! if (sum(whc(1:5)) > 0.) print *, sum(whc(1:5)) / 10.
-! if (soilvars(grid)%whc(1) /= missing_sp) print *, Tsat(1:5)
+! if (sum(awc(1:5)) > 0.) print *, sum(awc(1:5)) / 10.
+! if (soilvars(grid)%awc(1) /= missing_sp) print *, Tsat(1:5)
 
 
-end subroutine soilprep
+end subroutine initsoil
 
 !---------------------------------------------------------------------
 

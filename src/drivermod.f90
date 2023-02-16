@@ -1,450 +1,316 @@
 module drivermod
 
-use parametersmod, only : i2,i4,sp,dp
-use errormod,      only : ncstat,netcdf_err
-use outputmod,     only : infompi
-use netcdf
-use mpi
+! Module to recieve MPI job info, initiate states and distribute gridcell-level calculations
+
+use parametersmod, only : i4,sp
 
 implicit none
+
+! Module variable for printgrid output
+real(sp),      allocatable, dimension(:) :: plon
+real(sp),      allocatable, dimension(:) :: plat
+integer(i4),   allocatable, dimension(:) :: gruns
+character(50), allocatable, dimension(:) :: textfilenames
+integer(i4)                              :: ngrid
+integer(i4)                              :: outmode
 
 contains
 
-!---------------------------------------------------------------------
+!-------------------------------------------------------
 
-subroutine initdate(info,job,rank)
+subroutine driver(info,job,rank)
 
-use parametersmod, only : baseyr,ndaymonth
-use statevarsmod   , only : startyr,endyr,calcyrs,nd,srt,cnt,cntt,p0,p1,tlen
+use parametersmod,   only : i2,i4,sp,dp
+use mpivarsmod,      only : mpivars
+use pftparmod,       only : pftparameters
+use printgridmod,    only : readgrdlist,setgrid,gentextfile
+use randomdistmod,   only : randomstate
+use statevarsmod,    only : inlon,inlat,time,indx,xlen,ylen,tlen,invars,nd,&
+                            mon_metvars,day_metvars,soil_vars,gpp_vars,veg_vars,topo_vars,sv
+use netcdfinputmod,  only : soildatainput,topodatainput
+use initmod,         only : initlonlat
 
 implicit none
 
-type(infompi), target    , intent(in) :: info
+type(mpivars), target    , intent(in) :: info
 integer(i4), dimension(2), intent(in) :: job
 integer                  , intent(in) :: rank
 
 ! Pointers for mpi info variables
-character(100), pointer :: infile
-character(100), pointer :: outfile
-character(100), pointer :: timestring
-integer(i4)   , pointer :: nproc
-integer(i4)   , pointer :: t0
-integer(i4)   , pointer :: nt
+character(200), pointer :: outfile
+character(200), pointer :: gridlistfile
+character(200), pointer :: cfile_spinup
+character(200), pointer :: cfile_transient
+character(200), pointer :: soilfile
+character(200), pointer :: topofile
+logical,        pointer :: dospinup
+logical,        pointer :: dotransient
+integer(i4),    pointer :: spin_baseyr
+integer(i4),    pointer :: spin_startyr
+integer(i4),    pointer :: spinupyears
+integer(i4),    pointer :: tran_baseyr
+integer(i4),    pointer :: tran_startyr
+integer(i4),    pointer :: transientyears
+integer(i4),    pointer :: ilen
+integer(i4),    pointer :: spin_tlen
+integer(i4),    pointer :: tran_tlen
 
-integer :: t1
-integer :: yr
-integer :: mon
-integer :: i
+! Pointers for statevars
+type(mon_metvars), pointer, dimension(:) :: monvars
+type(day_metvars), pointer, dimension(:) :: dayvars
+type(soil_vars),   pointer, dimension(:) :: soilvars
+type(gpp_vars),    pointer, dimension(:) :: gppvars
+type(veg_vars),    pointer, dimension(:) :: vegvars
+type(topo_vars),   pointer, dimension(:) :: topovars
+logical,           pointer, dimension(:) :: validcell
+real(dp),          pointer, dimension(:) :: lon
+real(dp),          pointer, dimension(:) :: lat
+type(randomstate), pointer, dimension(:) :: georndst
+real(sp),          pointer, dimension(:) :: elev
 
-!----------------------------------------------------
-! Pointers to mpi derived type variables
+! Local variables
+integer(i4), dimension(2) :: srt
+integer(i4), dimension(2) :: cnt
+character(200) :: infile
+logical        :: spinup
+integer(i4)    :: t0                ! start of time dimension for reading input file
+integer(i4)    :: nt                ! count of time dimension for reading input file
+integer(i4)    :: p0                ! time buffer-adjusted start position of input data array
+integer(i4)    :: p1                ! time buffer-adjusted end position of input data array
+integer(i4)    :: gridstart
+integer(i4)    :: gridcount
+integer(i4)    :: grid
+integer(i4)    :: baseyr
+integer(i4)    :: startyr
+integer(i4)    :: calcyrs
+integer(i4)    :: ndyear
+integer(i4)    :: g
+integer(i4)    :: yr
+integer(i4)    :: d
+integer(i4)    :: i
+real(sp)       :: start_time
+real(sp)       :: end_time
 
-infile     => info%infile
-outfile    => info%outfile
-timestring => info%timestring
-nproc      => info%nproc
-t0         => info%t0
-nt         => info%nt
+!-----------------------------------------------------------
 
-!----------------------------------------------------
-! Get the buffered start and end of the time dimension of each validpixel
+call CPU_TIME(start_time)
 
-startyr = ((t0 - 1) / 12) + baseyr
+!-------------------------
 
-calcyrs = nt / 12
+outfile         => info%outfile
+gridlistfile    => info%gridlistfile
+cfile_spinup    => info%cfile_spinup
+cfile_transient => info%cfile_transient
+soilfile        => info%soilfile
+topofile        => info%topofile
+dospinup        => info%dospinup
+dotransient     => info%dotransient
+spin_baseyr     => info%spin_baseyr
+spin_startyr    => info%spin_startyr
+spinupyears     => info%spinupyears
+tran_baseyr     => info%tran_baseyr
+tran_startyr    => info%tran_startyr
+transientyears  => info%transientyears
+ilen            => info%ilen
+spin_tlen       => info%spin_tlen
+tran_tlen       => info%tran_tlen
 
-cntt = 12 * (calcyrs + 2)          ! months, includes one-year (12 months) buffer on either end
+outmode         =  info%outmode
 
-!-------------------
-! calculate file start and count indices
-
-t1 = t0 + 12 * calcyrs - 1         ! index of the last month
-
-if (t0 == 1) then                  ! there is no additional data to be had at the front end so copy the first year twice
-  p0 = 13
-else
-  p0 = 1                           ! there is additional data before first year so grab it
-  t0 = t0 - 12
-end if
-
-if (t1 == tlen) then               ! there is no additional data to be had at the back end so copy the last year twice
-  p1 = cntt - 12
-else
-  p1 = cntt
-  t1 = t1 + 12
-end if
-
-nt = t1 - t0 + 1          ! nt changes to actual count of number of elements including buffer years (+/- 1 year)
-
-!-------------------
-
-if (rank == 0) then
-  write(0,*) startyr,calcyrs
-  write(0,*) cntt,nt
-  write(0,*) t0,t1
-  write(0,*) p0,p1
-end if
-
-!-------------------
-! Calculate days per month
-
-endyr = startyr + calcyrs - 1
-
-allocate(nd(cntt))
-
-i = 1
-do yr = startyr-1, endyr+1
-  do mon = 1, 12
-
-    nd(i) = ndaymonth(yr,mon)
-
-    i = i + 1
-
-  end do
-end do
-
-!-------------------
+!-------------------------
 ! Create start and count array from the mpi job info
 
-srt = [job(1), t0]    ! Start of gridcell, start of time dimension
-cnt = [job(2), nt]    ! Count of gridcell, count of time dimension (including +/- 1 buffer years)
-
-
-end subroutine initdate
-
-!---------------------------------------------------------------------
-
-subroutine initlonlat(info,job,rank)
-
-! 1. Save current lon and lat of the gridcells into gridlon and gridlat
-! 2. Decide if the current CPU process would require to print
-
-use statevarsmod, only : lon,lat,indx,srt,cnt,gridlon,gridlat,lprint,gprint
-
-implicit none
-
-type(infompi), target    , intent(in) :: info
-integer(i4), dimension(2), intent(in) :: job
-integer                  , intent(in) :: rank
-
-real(sp), pointer :: plon
-real(sp), pointer :: plat
-
-integer(i4) :: gridcount
-integer(i4) :: ll
-integer(i4) :: lon_loc
-integer(i4) :: lat_loc
-integer(i4), dimension(2) :: ll_loc
-
-integer :: grid
-integer :: i
-integer :: j
-
-!---------------------
-
-plon => info%plon
-plat => info%plat
-
+gridstart = job(1)
 gridcount = job(2)
 
-allocate(gridlon(gridcount))
-allocate(gridlat(gridcount))
+allocate(sv(gridcount))
 
-!---------------------
+monvars   => sv%monvars
+soilvars  => sv%soilvars
+topovars  => sv%topovars
+vegvars   => sv%vegvars
+lon       => sv%lon
+lat       => sv%lat
+georndst  => sv%georndst
+elev      => sv%topovars%elev
+validcell => sv%validcell
 
-do grid = 1, gridcount
+!-------------------------
 
-  ll = srt(1) + (grid - 1)   ! Get the current index value
+call soildatainput(soilfile,gridstart,gridcount,soilvars)                             ! Read in soil variables to statevars
 
-  ! Get the value of lon and lat from index dimension
-  ll_loc = findloc(indx, ll)
+call topodatainput(topofile,gridstart,gridcount,topovars,validcell)                   ! Read in topographic variables to statevars
 
-  lon_loc = ll_loc(1)
-  lat_loc = ll_loc(2)
+call pftparameters()                                                                  ! Initialize PFT-specific parameters
 
-  gridlon(grid) = lon(lon_loc)
-  gridlat(grid) = lat(lat_loc)
+call initlonlat(cfile_spinup,gridstart,gridcount,xlen,ylen,inlon,inlat,indx,lon,lat)  ! Save lon and lat for each indexed grid
 
-end do
+!-------------------------
 
-!---------------------
+if (outmode == 1) call readgrdlist(gridlistfile,plon,plat)
 
-lprint = .FALSE.    ! logical variable to determine whether grid was sent to this core
-gprint = 0          ! variable to store the grid index if lprint = .TRUE.
+if (outmode == 1) call setgrid(lon,lat,plon,plat,ngrid,gruns)
 
-do grid = 1, gridcount
+if (outmode == 1) call gentextfile(lon,lat,gruns,textfilenames)
 
-    if (gridlon(grid) == plon .AND. gridlat(grid) == plat) then
+if (outmode == 0) ngrid = gridcount
 
-      lprint = .TRUE.
-      gprint = grid
+!-----------------------------------------------------------
 
-    end if
+infile  = cfile_spinup
+baseyr  = spin_baseyr
+startyr = spin_startyr
+calcyrs = spinupyears
+spinup  = .true.
 
-end do
+if (dospinup) then
 
-! print *, lprint, plon, plat, gprint
+  call alvar(infile,outfile,rank,gridstart,gridcount,baseyr,startyr,calcyrs,spinup)
 
+  deallocate(nd)
+  deallocate(invars)
 
-end subroutine initlonlat
+  spinup  = .false.
 
-!---------------------------------------------------------------------
+end if
 
-subroutine initmonvars()
+!-----------------------------------------------------------
 
-use statevarsmod, only : cnt,cntt,monvars
+infile  = cfile_transient
+baseyr  = tran_baseyr
+startyr = tran_startyr
+calcyrs = transientyears
 
-implicit none
+if (dotransient) then
 
-integer :: gridcount
-integer :: i
+  call alvar(infile,outfile,rank,gridstart,gridcount,baseyr,startyr,calcyrs,spinup)
 
-!-------------------
+end if
 
-gridcount = cnt(1)
+!-----------------------------------------------------------
 
-!-------------------
+call CPU_TIME(end_time)
 
-allocate(monvars(gridcount))
+write(0,*) 'Rank:',rank, 'time spent on model:', end_time - start_time
 
-do i = 1, gridcount
+!-------------------------
 
-  allocate(monvars(i)%tmp(cntt))
-  allocate(monvars(i)%dtr(cntt))
-  allocate(monvars(i)%pre(cntt))
-  allocate(monvars(i)%wet(cntt))
-  allocate(monvars(i)%cld(cntt))
-  allocate(monvars(i)%wnd(cntt))
+end subroutine driver
 
-end do
+!-----------------------------------------------------------
+!-----------------------------------------------------------
+!-----------------------------------------------------------
+!-----------------------------------------------------------
+!-----------------------------------------------------------
 
+subroutine alvar(infile,outfile,rank,gridstart,gridcount,baseyr,startyr,calcyrs,spinup)
 
-end subroutine initmonvars
-
-!---------------------------------------------------------------------
-
-subroutine initsoilvars()
-
-use statevarsmod,    only : soilvars,cnt
-
-implicit none
-
-integer :: gridcount
-integer :: i
-
-!-------------------
-
-gridcount = cnt(1)
-
-!-------------------
-
-allocate(soilvars(gridcount))
-
-
-end subroutine initsoilvars
-
-!---------------------------------------------------------------------
-
-subroutine initgppvars()
-
-use statevarsmod,    only : gppvars,cnt,ndyear
+use parametersmod,   only : i4,sp
+use statevarsmod,    only : inlon,inlat,time,indx,xlen,ylen,invars,nd,sv
+use orbitmod,        only : orbitpars,orbit,calcorbitpars
+use netcdfinputmod,  only : metdatainput
+use netcdfoutputmod, only : netcdfoutput,netcdfoutput_onelayer
+use initmod,         only : initdate,initinvars,calcndyear
+use printgridmod,    only : printgrid
+use alvarmod,        only : alvar_annual
+use alvarmod_daily,  only : alvar_daily
 
 implicit none
 
-integer :: gridcount
-integer :: i
+character(200), intent(in) :: infile        ! Climate file input
+character(200), intent(in) :: outfile       ! Output file
+integer(i4),    intent(in) :: rank          ! Rank of mpi process
+integer(i4),    intent(in) :: gridstart     ! Index of gridcell start
+integer(i4),    intent(in) :: gridcount     ! Number of gridcell sent to process
+integer(i4),    intent(in) :: baseyr        ! Base year of input climate file
+integer(i4),    intent(in) :: startyr       ! Start year of run
+integer(i4),    intent(in) :: calcyrs       ! Number of simulation years
+logical,        intent(in) :: spinup        ! Spinup / transient logical
 
-!-------------------
+real(sp), pointer, dimension(:) :: elev
 
-gridcount = cnt(1)
+integer(i4), dimension(2) :: srt
+integer(i4), dimension(2) :: cnt
+integer(i4) :: tlen
+integer(i4) :: t0
+integer(i4) :: p0
+integer(i4) :: p1
+integer(i4) :: nt
+integer(i4) :: cntt
+integer(i4) :: grid
+integer(i4) :: g
+integer(i4) :: ndyear
+integer(i4) :: yr
+integer(i4) :: d
+integer(i4) :: i
 
-!-------------------
+elev => sv%topovars%elev
 
-allocate(gppvars(gridcount,366))
+call initdate(infile,rank,baseyr,startyr,calcyrs,tlen,t0,p0,p1,nt,cntt,nd)    ! Initialize the start, count and date of the job
 
+srt = [gridstart, t0]    ! Start of gridcell, start of time dimension
+cnt = [gridcount, nt]    ! Count of gridcell, count of time dimension (including +/- 1 buffer years)
 
-end subroutine initgppvars
+!-------------------------
 
-!---------------------------------------------------------------------
+call initinvars(gridcount,cntt,invars)    ! Initilize the dimensions of the metvars variables (allocate by gridcount)
 
-subroutine initvegvars()
+!-------------------------
 
-use statevarsmod,    only : vegvars,cnt,ndyear
+call metdatainput(infile,gridcount,srt,cnt,cntt,p0,p1,xlen,ylen,tlen, &   ! Read in full array of monthly met input variable series
+                  inlon,inlat,time,indx,elev,invars)
 
-implicit none
+!-----------------------------------------------------------
 
-integer :: gridcount
-integer :: i
+yearloop : do yr = 1, calcyrs
 
-!-------------------
+  !-------------------------
 
-gridcount = cnt(1)
+  if (outmode == 0) print *, "Rank ", rank, " Working on year ", yr, ' out of ', calcyrs
 
-!-------------------
+  !-------------------------
 
-allocate(vegvars(gridcount))
+  call calcndyear(yr,nd,ndyear)
 
+  call calcorbitpars(startyr,yr,orbit)
 
-end subroutine initvegvars
+  gridloop1 : do g = 1, ngrid
 
-!---------------------------------------------------------------------
+    if (outmode == 0) grid = g
+    if (outmode == 1) grid = gruns(g)
 
+    call alvar_annual(yr,grid,ndyear,calcyrs,spinup)
 
-subroutine inittopovars()
+  end do gridloop1
 
-use statevarsmod,    only : topovars,cnt
+  !-------------------------
 
-implicit none
+  dayloop : do d = 1, ndyear
 
-integer :: gridcount
-integer :: i
+    diurnalloop : do i = 1, 2
 
-!-------------------
+      gridloop2 : do g = 1, ngrid
 
-gridcount = cnt(1)
+        if (outmode == 0) grid = g
+        if (outmode == 1) grid = gruns(g)
 
-!-------------------
+        call alvar_daily(yr,grid,ndyear,calcyrs,d,i,spinup)
 
-allocate(topovars(gridcount))
+        if (outmode == 1) call printgrid(calcyrs,yr,d,i,grid,textfilenames(g),sv(grid))
 
+      end do gridloop2
 
-end subroutine inittopovars
+    end do diurnalloop
 
-!---------------------------------------------------------------------
+  end do dayloop
 
-subroutine copygenvars(year,grid)
+  !-------------------------
+  ! Output variables into netcdf file in parallel
+  ! if (outmode == 0) call netcdfoutput(outfile,srt,cnt,year,ndyear,nd,sv)
+  if (outmode == 0 .and. yr == calcyrs .and. .not.spinup) call netcdfoutput_onelayer(outfile,srt,cnt,yr,ndyear,nd,sv)
 
-use statevarsmod,    only : nd,monvars,genvars
+end do yearloop
 
-implicit none
-
-integer(i4), intent(in) :: year
-integer(i4), intent(in) :: grid
-
-real(sp), pointer, dimension(:) :: tmp        ! mean monthly temperature (degC)
-real(sp), pointer, dimension(:) :: dtr        ! mean monthly diurnal temperature range (degC)
-real(sp), pointer, dimension(:) :: pre        ! total monthly precipitation (mm)
-real(sp), pointer, dimension(:) :: wet        ! number of days in the month with precipitation > 0.1 mm (days)
-real(sp), pointer, dimension(:) :: cld        ! mean monthly cloud cover (fraction)
-real(sp), pointer, dimension(:) :: wnd        ! mean monthly 10m windspeed (m s-1)
-
-integer(i4) :: start
-integer(i4) :: end
-
-!-------------------
-
-tmp => genvars%tmp
-dtr => genvars%dtr
-pre => genvars%pre
-wet => genvars%wet
-cld => genvars%cld
-wnd => genvars%wnd
-
-!-------------------
-
-start = (12 * year) + 1     ! Start month (i.e. Jan) begin after 12 months of the buffer year
-end   = start + 11          ! End month (i.e. Dec)
-
-start = start - 4           ! Include +/- 4 months buffer at beginning and end for gwgen calculations
-end   = end + 4
-
-!-------------------
-! Copy monthly series from monvars into genvars for gwgen() input
-
-tmp = monvars(grid)%tmp(start:end)
-dtr = monvars(grid)%dtr(start:end)
-pre = monvars(grid)%pre(start:end)
-wet = monvars(grid)%wet(start:end)
-cld = monvars(grid)%cld(start:end)
-wnd = monvars(grid)%wnd(start:end)
-
-genvars%nd  = nd(start:end)
-
-end subroutine copygenvars
-
-!---------------------------------------------------------------------
-! Subroutine to allocate module variable 'dayvars' to either 365 or 366 days in a year
-
-subroutine initdayvars(year,gridcount)
-
-use statevarsmod,    only : nd,ndyear,dayvars
-
-implicit none
-
-integer(i4), intent(in) :: year
-integer(i4), intent(in) :: gridcount
-
-integer(i4) :: start
-integer(i4) :: end
-
-!-------------------
-
-start = (12 * year) + 1     ! Start month (i.e. Jan) begin after 12 months of the buffer year
-end   = start + 11          ! End month (i.e. Dec)
-
-ndyear = sum(nd(start:end))
-
-!-------------------
-! Allocate number of days in year + 31 days (Jan of next year)
-! Additional month needed for diurnal temp calculations
-
-allocate(dayvars(gridcount,ndyear+31))
-
-
-end subroutine initdayvars
-
-!-----------------------------------------------------------------------
-! Subroutine to allocate the dimension of georndst to the number of grids
-
-subroutine initgeorndst()
-
-use randomdistmod, only : georndst
-use statevarsmod,    only : cnt
-
-implicit none
-
-integer(i4) :: gridcount
-
-gridcount = cnt(1)
-
-allocate(georndst(gridcount))
-
-end subroutine initgeorndst
-
-!-----------------------------------------------------------------------
-
-subroutine saveclonlat(grid)
-
-! Save current lon and lat of the current gridcell into 'clon' and 'clat'
-
-use statevarsmod,    only : lon,lat,indx,srt,cnt,clon,clat
-
-implicit none
-
-integer(i4), intent(in) :: grid
-
-integer(i4) :: ll
-integer(i4) :: lon_loc
-integer(i4) :: lat_loc
-integer(i4), dimension(2) :: ll_loc
-
-!---------------------
-
-ll = srt(1) + (grid - 1)   ! Get the current index value
-
-!---------------------
-
-! Get the value of lon and lat from index dimension
-ll_loc = findloc(indx, ll)
-
-lon_loc = ll_loc(1)
-lat_loc = ll_loc(2)
-
-clon = lon(lon_loc)
-clat = lat(lat_loc)
-
-end subroutine saveclonlat
-
-!-----------------------------------------------------------------------
+end subroutine alvar
 
 end module drivermod

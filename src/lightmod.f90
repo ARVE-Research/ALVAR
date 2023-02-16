@@ -3,8 +3,6 @@ module lightmod
 ! Module to calculate light competition aong vegetation and constrain grid FPC
 ! Code adapted from LPJ-LMFire by Leo Lai (Oct 2021)
 
-use parametersmod, only : i2,i4,sp,dp,missing_i2,missing_sp,Tfreeze,daysec
-
 implicit none
 
 !---------------------------------------------------------------------
@@ -13,51 +11,45 @@ implicit none
 
 contains
 
-subroutine light(year,grid,day)
+subroutine light(tree,present,fpc_grid,fpc_ind,fpc_inc,lm_ind,rm_ind,sm_ind,hm_ind,nind,sla,crownarea,lai_ind,&
+                 litter_ag_fast,litter_ag_slow,litter_bg,turnover_ind,meanfpc)
 
-use pftparmod,    only : npft,pftpar,tree
-use statevarsmod, only : vegvars,lprint,gprint
+use parametersmod, only : i4,sp
+use pftparmod,     only : npft,pftpar
 
-integer(i4), intent(in) :: year
-integer(i4), intent(in) :: grid
-integer(i4), intent(in) :: day
+implicit none
+
+logical,  dimension(:), intent(in)    :: tree              ! Tree PFT
+logical,  dimension(:), intent(inout) :: present           ! PFT present
+real(sp), dimension(:), intent(inout) :: fpc_grid          ! Foilage projective cover over grid (fraction)
+real(sp), dimension(:), intent(inout) :: fpc_ind           ! Foliage projective cover of individual (fraction)
+real(sp), dimension(:), intent(inout) :: fpc_inc           ! Foliage projective cover increment (fraction)
+real(sp), dimension(:), intent(inout) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: rm_ind            ! Root carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: nind              ! PFT population
+real(sp), dimension(:), intent(inout) :: sla               ! Specific leaf area (m2 gC-1)
+real(sp), dimension(:), intent(inout) :: crownarea         ! Tree crownarea (m2)
+real(sp), dimension(:), intent(inout) :: lai_ind           ! Leaf area index of individual (m2 m-2)
+real(sp), dimension(:), intent(inout) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: litter_bg         ! Below ground litter pool (gC m-2)
+real(sp), dimension(:), intent(inout) :: turnover_ind      ! Total turnover of individual (gC m-2)
+real(sp), dimension(:), intent(inout) :: meanfpc
 
 !-------------------------
 ! Parameters
 real(sp), parameter :: fpc_tree_max = 0.95    ! Maximum tree FPC (Sitch et al., 2003; P. 170)
 
 !-------------------------
-! Pointer variables
-logical,  pointer, dimension(:) :: present           ! PFT present
-real(sp), pointer, dimension(:) :: fpc_grid          ! Foilage projective cover over grid (fraction)
-real(sp), pointer, dimension(:) :: fpc_ind           ! Foliage projective cover of individual (fraction)
-real(sp), pointer, dimension(:) :: fpc_inc           ! Foliage projective cover increment (fraction)
-real(sp), pointer, dimension(:) :: lm_ind            ! Leaf carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: rm_ind            ! Root carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: sm_ind            ! Sapwood carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: hm_ind            ! Heartwood carbon mass of individual (gC m-2)
-real(sp), pointer, dimension(:) :: nind              ! PFT population
-real(sp), pointer, dimension(:) :: sla               ! Specific leaf area (m2 gC-1)
-real(sp), pointer, dimension(:) :: crownarea         ! Tree crownarea (m2)
-real(sp), pointer, dimension(:) :: lai_ind           ! Leaf area index of individual (m2 m-2)
-real(sp), pointer, dimension(:) :: litter_ag_fast    ! Fast above ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: litter_ag_slow    ! Slow above ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: litter_bg         ! Below ground litter pool (gC m-2)
-real(sp), pointer, dimension(:) :: turnover_ind      ! Total turnover of individual (gC m-2)
-
-!-------------------------
 ! Local variables
-integer :: pft
-integer :: ntree             ! Number of tree PFTs currently present
-integer :: ngrass            ! Number of tree PFTs currently present
-
 real(sp) :: fpc_inc_tree     ! Current years total FPC increment for tree PFTs
 real(sp) :: fpc_tree_total   ! Total grid FPC for tree PFTs
 real(sp) :: fpc_grass_max    ! Max allowed grass FPC given the current tree cover
 real(sp) :: fpc_grass_total  ! Total grid FPC for grass PFTs
 real(sp) :: grasscover       ! Grass PFT proportional cover ("crownarea" equivalent for grass)
 real(sp) :: excess           ! Total tree FPC or grass cover to be reduced
-
 real(sp) :: nind_kill        ! Reduction in individual density to reduce tree FPC to permitted maximum (indiv m-2)
 real(sp) :: rm_kill          ! Reduction in grass PFT root mass to reduce grass cover to permitted maximum (gC)
 real(sp) :: lm_kill          ! Reduction in grass PFT leaf mass to reduce grass cover to permitted maximum (gC)
@@ -65,25 +57,9 @@ real(sp) :: lm_old
 
 real(sp), dimension(npft) :: pft_excess
 
-!-------------------------
-
-present   => vegvars(grid)%present
-fpc_grid  => vegvars(grid)%fpc_grid
-fpc_ind   => vegvars(grid)%fpc_ind
-fpc_inc   => vegvars(grid)%fpc_inc
-lm_ind    => vegvars(grid)%lm_ind
-rm_ind    => vegvars(grid)%rm_ind
-sm_ind    => vegvars(grid)%sm_ind
-hm_ind    => vegvars(grid)%hm_ind
-nind      => vegvars(grid)%nind
-sla       => vegvars(grid)%sla
-crownarea => vegvars(grid)%crownarea
-lai_ind   => vegvars(grid)%lai_ind
-
-litter_ag_fast => vegvars(grid)%litter_ag_fast
-litter_ag_slow => vegvars(grid)%litter_ag_slow
-litter_bg      => vegvars(grid)%litter_bg
-turnover_ind   => vegvars(grid)%turnover_ind
+integer(i4) :: pft
+integer(i4) :: ntree             ! Number of tree PFTs currently present
+integer(i4) :: ngrass            ! Number of tree PFTs currently present
 
 !-------------------------
 ! Calculate total woody FPC, FPC increment and grass cover (= crownarea)
@@ -155,7 +131,7 @@ if (fpc_tree_total > fpc_tree_max) then  ! Reduce tree cover
 
       nind(pft) = nind(pft) - nind_kill
 
-      if (lprint .and. grid == gprint) write(0,*) 'NIND kill:', nind_kill
+      ! if (lprint .and. grid == gprint) write(0,*) 'NIND kill:', nind_kill
 
       !Transfer lost biomass to litter
 
@@ -245,6 +221,21 @@ litter_bg      = max(litter_bg, 0.)
 
 fpc_grid = max(fpc_grid, 0.)
 fpc_grid = min(fpc_grid, 1.)
+
+!-------------------------
+
+! if (year <= 30 .and. day == 1 .and. i == 1) then
+!   meanfpc = 0.
+! end if
+!
+! if (i == 2) then
+!   if (year <= 30) then
+!     meanfpc = meanfpc + fpc_grid / real(ndyear)
+!   else
+!     meanfpc = meanfpc * (real(ndyear-1) / real(ndyear)) + fpc_grid / real(ndyear)
+!   end if
+! end if
+
 
 !-------------------------
 
