@@ -32,7 +32,7 @@ use allocationmod,    only : allocation
 use rootmod,          only : rootdist
 use killplantmod,     only : killplant
 use mortalitymod,     only : mortality
-use averagemod,       only : longtermave
+use averagemod,       only : longtermave,output_ave
 
 implicit none
 
@@ -576,6 +576,8 @@ if (i == 2) call light(tree,present,fpc_grid,fpc_ind,fpc_inc,lm_ind,rm_ind,sm_in
 
 if (yr > calcyrs - 30 .and. i == 2) call longtermave(30.,grid,day,ndyear)
 
+if (i == 2) call output_ave(grid,day,ndyear)
+
 if (day == ndyear .and. i == 2) then
 
   call killplant(abm_inc,present,lm_ind,rm_ind,sm_ind,hm_ind,nind,litter_ag_fast,litter_ag_slow,litter_bg)
@@ -613,6 +615,7 @@ end if
 
 ! if (yr > 1020 .and. i == 2) print *, yr-1020,day,gpp,npp,sum(fpc_grid(1:7)),sum(fpc_grid(8:9)),elev
 
+if (.not.spinup .and. i == 2) print *, yr,day,sum(lai_ind(1:7))/count(present(1:7)),sum(lai_ind(8:9)),count(present(1:7))
 
 ! if (day == ndyear .and. i == 2) then
 !

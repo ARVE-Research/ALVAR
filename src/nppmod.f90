@@ -207,8 +207,8 @@ do pft = 1, npft
 
         !-------------------------
         ! End of growing season, approximate reserve lost over the winter / unfavorbale conditions
-        if (summergreen(pft) .and. leafoffdays(pft) == 1) clabile(pft) = clabile(pft) * 0.7
-        if (.not.tree(pft)   .and. leafoffdays(pft) >= 1) clabile(pft) = clabile(pft) * 0.9981
+        if (summergreen(pft) .and. leafoffdays(pft) == 1) clabile(pft) = clabile(pft) * 0.20
+        if (.not.tree(pft)   .and. leafoffdays(pft) >= 1) clabile(pft) = clabile(pft) * 0.90
 
         ! if (leafoffdays(pft) >= 1) clabile(pft) = clabile(pft) * 0.9981
 

@@ -19,13 +19,15 @@ program main
 
 ! Main program to distribute work among cores
 
-use parametersmod, only : i1,i2,i4,sp,dp
-use errormod,      only : ncstat,netcdf_err
-use coordsmod,     only : index,parsecoords
-use mpivarsmod,    only : mpivars
-use initmod,       only : initjob
-use outputmod,     only : getoutfile,getoutfile_onelayer
-use drivermod,     only : driver
+use parametersmod,  only : i1,i2,i4,sp,dp
+use errormod,       only : ncstat,netcdf_err
+use coordsmod,      only : index,parsecoords
+use mpivarsmod,     only : mpivars
+use initmod,        only : initjob
+use outputmod,      only : getoutfile,getoutfile_onelayer
+use netcdfsetupmod, only : genoutfile,netcdf_create
+use drivermod,      only : driver
+use list2gridmod,   only : list2grid
 use netcdf
 use mpi
 
@@ -85,7 +87,13 @@ if (rank == 0) then
 
   ! call getoutfile(info)
 
-  call getoutfile_onelayer(info)
+  ! call getoutfile_onelayer(info)
+
+  call genoutfile(info)
+
+  call netcdf_create(info,grid=.false.)
+
+  call netcdf_create(info,grid=.true.)
 
   call infotobyte(info,srt,cnt,ob)
 
@@ -117,6 +125,20 @@ write(0,*) 'Rank:', rank, 'recieved cell srt and cnt: ', job
 !--------------------
 
 call driver(info,job,rank)
+
+!--------------------
+
+call mpi_barrier(MPI_COMM_WORLD,ierr)
+
+!--------------------
+
+if (rank == 0) then
+
+  call list2grid(info)
+
+end if
+
+
 
 !--------------------
 

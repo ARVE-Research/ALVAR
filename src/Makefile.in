@@ -120,10 +120,11 @@ am_alvar_OBJECTS = parametersmod.$(OBJEXT) mpivarsmod.$(OBJEXT) \
 	lightmod.$(OBJEXT) turnovermod.$(OBJEXT) \
 	allocationmod.$(OBJEXT) rootmod.$(OBJEXT) \
 	killplantmod.$(OBJEXT) mortalitymod.$(OBJEXT) \
-	averagemod.$(OBJEXT) netcdfinputmod.$(OBJEXT) \
-	netcdfoutputmod.$(OBJEXT) printgridmod.$(OBJEXT) \
-	initmod.$(OBJEXT) alvarmod.$(OBJEXT) alvarmod_daily.$(OBJEXT) \
-	drivermod.$(OBJEXT) main.$(OBJEXT)
+	averagemod.$(OBJEXT) netcdfsetupmod.$(OBJEXT) \
+	netcdfinputmod.$(OBJEXT) netcdfoutputmod.$(OBJEXT) \
+	printgridmod.$(OBJEXT) initmod.$(OBJEXT) alvarmod.$(OBJEXT) \
+	alvarmod_daily.$(OBJEXT) drivermod.$(OBJEXT) \
+	list2gridmod.$(OBJEXT) main.$(OBJEXT)
 alvar_OBJECTS = $(am_alvar_OBJECTS)
 alvar_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -356,6 +357,7 @@ alvar_SOURCES = \
 	killplantmod.f90     \
 	mortalitymod.f90     \
 	averagemod.f90       \
+	netcdfsetupmod.f90   \
 	netcdfinputmod.f90   \
 	netcdfoutputmod.f90  \
 	printgridmod.f90		 \
@@ -363,6 +365,7 @@ alvar_SOURCES = \
 	alvarmod.f90         \
 	alvarmod_daily.f90   \
 	drivermod.f90 		   \
+	list2gridmod.f90     \
 	main.f90
 
 all: all-am

@@ -43,5 +43,62 @@ end subroutine longtermave
 
 
 
+subroutine output_ave(grid,day,ndyear)
+
+use parametersmod, only : i4,sp,dp,Tfreeze
+use statevarsmod,  only : sv,ns,nl
+use pftparmod,     only : npft
+
+integer(i4), intent(in) :: grid
+integer(i4), intent(in) :: day
+integer(i4), intent(in) :: ndyear
+
+
+if (day == 1) sv(grid)%outvars%livebiomass = 0.
+sv(grid)%outvars%livebiomass = sv(grid)%outvars%livebiomass + sum(sv(grid)%vegvars%lm_ind * sv(grid)%vegvars%nind) / ndyear &
+                                                            + sum(sv(grid)%vegvars%rm_ind * sv(grid)%vegvars%nind) / ndyear &
+                                                            + sum(sv(grid)%vegvars%sm_ind * sv(grid)%vegvars%nind) / ndyear
+
+if (day == 1) sv(grid)%outvars%AET = 0.
+sv(grid)%outvars%AET = sv(grid)%outvars%AET + sv(grid)%dayvars%daet(day)
+
+if (day == 1) sv(grid)%outvars%GPP = 0.
+sv(grid)%outvars%GPP = sv(grid)%outvars%GPP + sum(sv(grid)%gppvars%gpp(day,1:npft))
+
+if (day == 1) sv(grid)%outvars%NPP = 0.
+sv(grid)%outvars%NPP = sv(grid)%outvars%NPP + sum(sv(grid)%gppvars%npp(day,1:npft))
+
+if (day == 1) sv(grid)%outvars%treecover = 0.
+sv(grid)%outvars%treecover = sv(grid)%outvars%treecover + sum(sv(grid)%vegvars%fpc_grid(1:7)) / ndyear
+
+if (day == 1) sv(grid)%outvars%grasscover = 0.
+sv(grid)%outvars%grasscover = sv(grid)%outvars%grasscover + sum(sv(grid)%vegvars%fpc_grid(8:9)) / ndyear
+
+if (day == 1) sv(grid)%outvars%cover = 0.
+sv(grid)%outvars%cover = sv(grid)%outvars%cover + sv(grid)%vegvars%fpc_grid(1:npft) / ndyear
+
+if (day == 1) sv(grid)%outvars%nind = 0.
+sv(grid)%outvars%nind = sv(grid)%outvars%nind + sv(grid)%vegvars%nind(1:npft) / ndyear
+
+if (day == 1) sv(grid)%outvars%crownarea = 0.
+sv(grid)%outvars%crownarea = sv(grid)%outvars%crownarea + sv(grid)%vegvars%crownarea(1:npft) / ndyear
+
+if (day == 1) sv(grid)%outvars%soilmoisture = 0.
+sv(grid)%outvars%soilmoisture = sv(grid)%outvars%soilmoisture + sv(grid)%soilvars%Tliq(1:nl) / sv(grid)%soilvars%Tsat(1:nl) / ndyear
+
+if (day == 1) sv(grid)%outvars%soiltemp = 0.
+sv(grid)%outvars%soiltemp = sv(grid)%outvars%soiltemp + (sv(grid)%soilvars%Tsoil(1:nl) - Tfreeze) / ndyear
+
+if (day == 1) sv(grid)%outvars%height = 0.
+sv(grid)%outvars%height = sv(grid)%outvars%height + sv(grid)%vegvars%height(1:npft) / ndyear
+
+if (day == 1) sv(grid)%outvars%GDD5 = 0.
+sv(grid)%outvars%GDD5 = sv(grid)%outvars%GDD5 + max((sv(grid)%dayvars%tmean(day) - 5.),0.)
+
+
+end subroutine output_ave
+
+
+
 
 end module averagemod

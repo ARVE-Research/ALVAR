@@ -1,774 +1,469 @@
 module netcdfoutputmod
 
-! use outputmod,     only : mpivars
-! use pftparmod,     only : npft,pftpar,tree
-! use statevarsmod,  only : dayvars,soilvars,gppvars,vegvars,ndyear,nd,calcyrs,ilen
-! use biome1mod,     only : biomevars,biome_mean
-! use weathergenmod, only : roundto
-
+use parametersmod, only : sp,i2
 
 implicit none
 
-!---------------------------------------------------------------------
+public  :: netcdf_output
+public  :: netcdf_close
+private :: putvar2d
+! private :: putvar3d
+
+real(sp),    parameter :: rmissing = -9999.
+integer(i2), parameter :: imissing = -32768
 
 contains
 
-!---------------------------------------------------------------------
+!----------------------------------------------------------------------------------------------------------------------------
 
-subroutine netcdfoutput(outfile,ssrt,ccnt,year,ndyear,nd,sv)
+subroutine netcdf_output(ofid,gridstart,gridcount,year,outvar_on,sv)
 
-use parametersmod, only : i2,i4,sp
-use errormod,      only : ncstat,netcdf_err
-use mpivarsmod,    only : ofid
-use pftparmod,     only : npft,tree
-use statevarsmod,  only : statevars
+use parametersmod, only : i4,sp
+use pftparmod, only : npft
+use statevarsmod, only : nl,statevars
+use errormod, only : ncstat,netcdf_err
 use netcdf
 use mpi
 
 implicit none
 
-character(100),                intent(in) :: outfile
-integer(i4),     dimension(2), intent(in) :: ssrt
-integer(i4),     dimension(2), intent(in) :: ccnt
+integer(i4),                   intent(in) :: ofid
+integer(i4),                   intent(in) :: gridstart
+integer(i4),                   intent(in) :: gridcount
 integer(i4),                   intent(in) :: year
-integer(i4),                   intent(in) :: ndyear
-integer(i4),     dimension(:), intent(in) :: nd
+logical,         dimension(:), intent(in) :: outvar_on
 type(statevars), dimension(:), intent(in) :: sv
 
-! integer(i4) :: ofid
-integer(i4) :: dimid
-integer(i4) :: varid
-integer(i4), dimension(2) :: srt
-integer(i4), dimension(2) :: cnt
+integer(i4), dimension(1) :: tval
+integer(i4) :: tpos
 
-integer(i2), allocatable, dimension(:) :: outvar_biome
-integer(i2), allocatable, dimension(:) :: outvar
-real(sp),    allocatable, dimension(:) :: outvar_r
-real(sp),    allocatable, dimension(:,:,:) :: outvar_pft
+integer :: varid
+integer :: i
+integer :: j
 
-real(sp), dimension(npft) :: fpc_grid
-real(sp), dimension(npft) :: meanfpc
+real(sp), allocatable, dimension(:)     :: rvar1d
+real(sp), allocatable, dimension(:,:)   :: rvar2d
+real(sp), allocatable, dimension(:,:,:) :: rvar3d
 
-integer(i4) :: i
-integer(i4) :: pft
-integer(i4) :: grid
+real(sp), dimension(3) :: NBP
 
-!-------------------------
+!----------------------------
+!write the time variable
 
-srt(1) = ssrt(1)
-cnt(1) = ccnt(1)
 
-if (year == 1) then
-  srt(2) = 1
-else
-  srt(2) = sum(nd(1:(year-1)*12)) + 1
-end if
+tval = year
+tpos = year
 
-cnt(2) = ndyear
+! ncstat = nf90_inq_varid(ofid,'time',varid)
+! ncstat = nf90_put_var(ofid,varid,tval,start=[tpos],count=[1])
+! if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-!-------------------------
 
-allocate(outvar_biome(cnt(1)))
+!-----------------------------------------------------
+!write other variables
+!-----------------------------------------------------
 
-allocate(outvar(cnt(1)))
+allocate(rvar1d(gridcount))
 
-allocate(outvar_r(cnt(1)))
+!----------------------------
+! livebiomass
+if (outvar_on(2)) then
 
-allocate(outvar_pft(cnt(1),1,npft))
-
-!-------------------------
-
-if (year == 1) then
-  ncstat = nf90_open(outfile,nf90_write,ofid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)
-  if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-end if
-
-!-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'biome1_year',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_biome = biomevars(:,year)%biome
-!
-! where (outvar_biome == missing_i2)
-!   outvar_biome = missing_i2
-! else where
-!   outvar_biome = nint(outvar_biome / 0.1)
-! end where
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_biome,start=[srt(1),year],count=[cnt(1),1])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! if (year == calcyrs) then
-!
-!   ncstat = nf90_inq_varid(ofid,'biome1_mean',varid)
-!   if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!   outvar_biome = biome_mean
-!
-!   where (outvar_biome == missing_i2)
-!     outvar_biome = missing_i2
-!   else where
-!     outvar_biome = nint(outvar_biome / 0.1)
-!   end where
-!
-!   ncstat = nf90_put_var(ofid,varid,outvar_biome,start=[srt(1)],count=[cnt(1)])
-!   if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! end if
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tmin',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tmin / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tmax',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tmax / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tday',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tday / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tnight',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tnight / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tmean',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tmean / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tdew',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tdew / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'wind',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%wind / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'prec',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%prec
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'dayl',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%dayl
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'vpd',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%vpd
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'srad',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%srad
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'rhum',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%rhum
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!-----------------------------------------------------------
-
-! ncstat = nf90_inq_varid(ofid,'dpet',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! outvar_r = dayvars(:,1:ndyear)%dpet
-!
-! do grid = 1, cnt(1)
-!   do i = 1, ndyear
-!     outvar_r(grid,i) = sum(sv(grid)%gppvars%gpp)
-!     if (gppvars(grid,1)%gpp == -9999.) outvar_r(grid,i) = -9999.
-!   end do
-! end do
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'daet',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! outvar_r = dayvars(:,1:ndyear)%daet
-!
-! do grid = 1, cnt(1)
-!   do i = 1, ndyear
-!     outvar_r(grid,i) = sum(sv(grid)%gppvars%npp)
-!     if (gppvars(grid,1)%npp == -9999.) outvar_r(grid,i) = -9999.
-!   end do
-! end do
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-! ncstat = nf90_inq_varid(ofid,'alpha',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%alpha
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-! -----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'gpp',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-do grid = 1, cnt(1)
-  do pft = 1, npft
-    outvar_pft(grid,1,pft) = sum(sv(grid)%gppvars%gpp(:,pft))
+  do i = 1, gridcount
+    rvar1d(i) = sv(i)%outvars%livebiomass
+    if (.not.sv(i)%validcell) rvar1d(i) = rmissing
   end do
-end do
 
-ncstat = nf90_put_var(ofid,varid,outvar_pft,start=[srt(1),year,1],count=[cnt(1),1,npft])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+  call putvar1d(ofid,tpos,'livebiomass',gridstart,gridcount,rvar1d)
 
-!-----------------------------------------------------------
+end if
+
+!----------------------------
+! GPP
+if (outvar_on(13)) then
+
+  do i = 1, gridcount
+    rvar1d(i) = sv(i)%outvars%GPP
+    if (.not.sv(i)%validcell) rvar1d(i) = rmissing
+  end do
+
+  call putvar1d(ofid,tpos,'GPP',gridstart,gridcount,rvar1d)
+
+end if
+
+!----------------------------
+! NPP
+if (outvar_on(14)) then
+
+  do i = 1, gridcount
+    rvar1d(i) = sv(i)%outvars%NPP
+    if (.not.sv(i)%validcell) rvar1d(i) = rmissing
+  end do
+
+  call putvar1d(ofid,tpos,'NPP',gridstart,gridcount,rvar1d)
+
+end if
+
+!----------------------------
+! Treecover
+if (outvar_on(21)) then
+
+  do i = 1, gridcount
+    rvar1d(i) = sv(i)%outvars%treecover
+    if (.not.sv(i)%validcell) rvar1d(i) = rmissing
+  end do
+
+  call putvar1d(ofid,tpos,'treecover',gridstart,gridcount,rvar1d)
+
+end if
+
+!----------------------------
+! Grasscover
+if (outvar_on(22)) then
+
+  do i = 1, gridcount
+    rvar1d(i) = sv(i)%outvars%grasscover
+    if (.not.sv(i)%validcell) rvar1d(i) = rmissing
+  end do
+
+  call putvar1d(ofid,tpos,'grasscover',gridstart,gridcount,rvar1d)
+
+end if
+
+
+!----------------------------
+! Cover
+if (outvar_on(23)) then
+
+  allocate(rvar2d(gridcount,npft))
+
+  do i = 1, gridcount
+    do j = 1, npft
+      rvar2d(i,j) = sv(i)%outvars%cover(j)
+      if (.not.sv(i)%validcell) rvar2d(i,:) = rmissing
+    end do
+  end do
+
+  call putvar2d(ofid,tpos,'cover',gridstart,gridcount,rvar2d)
+
+  deallocate(rvar2d)
+
+end if
+
+!----------------------------
+! Nind
+if (outvar_on(25)) then
+
+  allocate(rvar2d(gridcount,npft))
+
+  do i = 1, gridcount
+    do j = 1, npft
+      rvar2d(i,j) = sv(i)%outvars%nind(j)
+      if (.not.sv(i)%validcell) rvar2d(i,:) = rmissing
+    end do
+  end do
+
+  call putvar2d(ofid,tpos,'nind',gridstart,gridcount,rvar2d)
+
+  deallocate(rvar2d)
+
+end if
+
+!----------------------------
+! Crownarea
+if (outvar_on(26)) then
+
+  allocate(rvar2d(gridcount,npft))
+
+  do i = 1, gridcount
+    do j = 1, npft
+      rvar2d(i,j) = sv(i)%outvars%crownarea(j)
+      if (.not.sv(i)%validcell) rvar2d(i,:) = rmissing
+    end do
+  end do
+
+  call putvar2d(ofid,tpos,'crownarea',gridstart,gridcount,rvar2d)
+
+  deallocate(rvar2d)
+
+end if
+
+!----------------------------
+! Soil moisture
+if (outvar_on(27)) then
+
+  allocate(rvar2d(gridcount,nl))
+
+  do i = 1, gridcount
+    do j = 1, nl
+      rvar2d(i,j) = sv(i)%outvars%soilmoisture(j)
+      if (.not.sv(i)%validcell) rvar2d(i,:) = rmissing
+    end do
+  end do
+
+  call putvar2d(ofid,tpos,'soilmoisture',gridstart,gridcount,rvar2d)
+
+  deallocate(rvar2d)
+
+end if
+
+!----------------------------
+! Soil temperature
+if (outvar_on(28)) then
+
+  allocate(rvar2d(gridcount,nl))
+
+  do i = 1, gridcount
+    do j = 1, nl
+      rvar2d(i,j) = sv(i)%outvars%soiltemp(j)
+      if (.not.sv(i)%validcell) rvar2d(i,:) = rmissing
+    end do
+  end do
+
+  call putvar2d(ofid,tpos,'soiltemp',gridstart,gridcount,rvar2d)
+
+  deallocate(rvar2d)
+
+end if
+
+!----------------------------
+! Height
+if (outvar_on(46)) then
+
+  allocate(rvar2d(gridcount,npft))
+
+  do i = 1, gridcount
+    do j = 1, npft
+      rvar2d(i,j) = sv(i)%outvars%height(j)
+      if (.not.sv(i)%validcell) rvar2d(i,:) = rmissing
+    end do
+  end do
+
+  call putvar2d(ofid,tpos,'height',gridstart,gridcount,rvar2d)
+
+  deallocate(rvar2d)
+
+end if
+
+!----------------------------
+! GDD5
+if (outvar_on(47)) then
+
+  do i = 1, gridcount
+    rvar1d(i) = sv(i)%outvars%GDD5
+    if (.not.sv(i)%validcell) rvar1d(i) = rmissing
+  end do
+
+  call putvar1d(ofid,tpos,'GDD5',gridstart,gridcount,rvar1d)
+
+end if
+
+!--------------------------------------------
+! flush the write buffer every 20 years of run
+
+if (mod(tpos,20) == 0) ncstat = nf90_sync(ofid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 !
-! ncstat = nf90_inq_varid(ofid,'ForFireMk5',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%ForFireMk5
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+! tpos = tpos + 1
 
-!-----------------------------------------------------------
-!-----------------------------------------------------------
-!-----------------------------------------------------------
+deallocate(rvar1d)
 
-! ncstat = nf90_close(ofid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
+end subroutine netcdf_output
 
+!----------------------------------------------------------------------------------------------------------------------------
 
-end subroutine netcdfoutput
+subroutine putvar1d(ofid,tpos,varname,gridstart,gridcount,rvar1d)
 
-!---------------------------------------------------------------------
-
-subroutine netcdfoutput_onelayer(outfile,ssrt,ccnt,year,ndyear,nd,sv)
-
-use parametersmod, only : i2,i4,sp
+use parametersmod, only : i4,sp
 use errormod,      only : ncstat,netcdf_err
-use pftparmod,     only : npft,tree
-use statevarsmod,  only : statevars
 use netcdf
 use mpi
 
 implicit none
 
-character(100),                intent(in) :: outfile
-integer(i4),     dimension(2), intent(in) :: ssrt
-integer(i4),     dimension(2), intent(in) :: ccnt
-integer(i4),                   intent(in) :: year
-integer(i4),                   intent(in) :: ndyear
-integer(i4),     dimension(:), intent(in) :: nd
-type(statevars), dimension(:), intent(in) :: sv
+integer(i4),                intent(in) :: ofid
+integer(i4),                intent(in) :: tpos
+character(*),               intent(in) :: varname
+integer(i4),                intent(in) :: gridstart
+integer(i4),                intent(in) :: gridcount
+real(sp),     dimension(:), intent(in) :: rvar1d
 
-integer(i4) :: ofid
-integer(i4) :: dimid
-integer(i4) :: varid
-integer(i4), dimension(2) :: srt
-integer(i4), dimension(2) :: cnt
+! real(sp), allocatable, dimension(:,:) :: rvar1d
 
-integer(i2), allocatable, dimension(:)   :: outvar
-real(sp),    allocatable, dimension(:)   :: outvar_r
-real(sp),    allocatable, dimension(:,:) :: outvar_pft
+integer :: varid
 
-real(sp), dimension(npft) :: fpc_grid
-real(sp), dimension(npft) :: meanfpc
+!-----------------
 
-integer(i4) :: i
-integer(i4) :: grid
+!select type(var1d)
+!type is (real)
 
-!-------------------------
+! allocate(rvar1d(gridcount,1))
 
-srt(1) = ssrt(1)
-cnt(1) = ccnt(1)
-
-if (year == 1) then
-  srt(2) = 1
-else
-  srt(2) = sum(nd(1:(year-1)*12)) + 1
-end if
-
-cnt(2) = ndyear
-
-!-------------------------
-
-allocate(outvar(cnt(1)))
-
-allocate(outvar_r(cnt(1)))
-
-allocate(outvar_pft(cnt(1),npft))
-
-!-------------------------
-
-ncstat = nf90_open(outfile,nf90_write,ofid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
+! rvar1d = reshape(var1d,[cntx,cnty])
 !
-! ncstat = nf90_inq_varid(ofid,'biome1_year',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_biome = biomevars(:,year)%biome
-!
-! where (outvar_biome == missing_i2)
-!   outvar_biome = missing_i2
-! else where
-!   outvar_biome = nint(outvar_biome / 0.1)
-! end where
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_biome,start=[srt(1),year],count=[cnt(1),1])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! if (year == calcyrs) then
-!
-!   ncstat = nf90_inq_varid(ofid,'biome1_mean',varid)
-!   if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!   outvar_biome = biome_mean
-!
-!   where (outvar_biome == missing_i2)
-!     outvar_biome = missing_i2
-!   else where
-!     outvar_biome = nint(outvar_biome / 0.1)
-!   end where
-!
-!   ncstat = nf90_put_var(ofid,varid,outvar_biome,start=[srt(1)],count=[cnt(1)])
-!   if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! end if
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tmin',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tmin / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tmax',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tmax / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tday',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tday / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tnight',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tnight / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tmean',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tmean / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'tdew',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%tdew / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'wind',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar = nint(dayvars(:,1:ndyear)%wind / 0.1)
-!
-! ncstat = nf90_put_var(ofid,varid,outvar,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'prec',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%prec
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'dayl',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%dayl
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! ! -----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'vpd',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%vpd
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'srad',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%srad
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! !-----------------------------------------------------------
+! where (.not. cellmask) rvar2d = rmissing
 
-ncstat = nf90_inq_varid(ofid,'rhum',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    outvar_r(grid) = sum(sv(grid)%dayvars%rhum(1:ndyear)) / ndyear
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'dpet',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-      outvar_r(grid) = sum(sv(grid)%dayvars%dpet(1:ndyear))
-      if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'daet',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-      outvar_r(grid) = sum(sv(grid)%dayvars%daet(1:ndyear))
-      if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'alpha',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    outvar_r(grid) = sum(sv(grid)%dayvars%alpha(1:ndyear)) / ndyear
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'gpp',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    ! outvar_r(grid) = sum(sv(grid)%gppvars%gpp(:,1)) + sum(sv(grid)%gppvars%gpp(:,2)) + sum(sv(grid)%gppvars%gpp(:,6)) &
-    !                   + sum(sv(grid)%gppvars%gpp(:,3)) + sum(sv(grid)%gppvars%gpp(:,4)) + sum(sv(grid)%gppvars%gpp(:,5)) &
-    !                   + sum(sv(grid)%gppvars%gpp(:,7)) + sum(sv(grid)%gppvars%gpp(:,8))
-
-    outvar_r(grid) = sv(grid)%longave%gpp
-
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'npp',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    ! outvar_r(grid) = sum(sv(grid)%gppvars%npp(:,1)) + sum(sv(grid)%gppvars%npp(:,2)) + sum(sv(grid)%gppvars%npp(:,6)) &
-    !                   + sum(sv(grid)%gppvars%npp(:,3)) + sum(sv(grid)%gppvars%npp(:,4)) + sum(sv(grid)%gppvars%npp(:,5)) &
-    !                   + sum(sv(grid)%gppvars%npp(:,7)) + sum(sv(grid)%gppvars%npp(:,8))
-
-    outvar_r(grid) = sv(grid)%longave%npp
-
-    if (sv(grid)%gppvars%npp(1,1) == -9999.) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'lm_ind',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    ! outvar_r(grid) = sum(sv(grid)%vegvars%lm_ind(:))
-    ! outvar_r(grid) = sum(sv(grid)%soilvars%Tliq(1:6)) / sum(sv(grid)%soilvars%Tsat(1:6))
-    outvar_r(grid) = sv(grid)%longave%soilw
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'rm_ind',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    ! outvar_r(grid) = sum(sv(grid)%vegvars%rm_ind(:))
-    ! outvar_r(grid) = sv(grid)%soilvars%zsno
-    ! outvar_r(grid) = sum(sv(grid)%soilvars%Tliq(1:6)) + sum(sv(grid)%soilvars%Tice(1:6)) / sum(sv(grid)%soilvars%Tsat(1:6))
-    ! outvar_r(grid) = sum(sv(grid)%soilvars%Tsoil(1:3))/3. - 273.15
-    ! outvar_r(grid) = sv(grid)%vegvars%rm_ind(1)
-    outvar_r(grid) = sv(grid)%longave%Tsoil - 273.15
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'sm_ind',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    ! outvar_r(grid) = sum(sv(grid)%vegvars%lm_ind(:) * sv(grid)%vegvars%nind(:)) +&
-    !                   sum(sv(grid)%vegvars%rm_ind(:) * sv(grid)%vegvars%nind(:))
-    outvar_r(grid) = sv(grid)%longave%lm_ind + sv(grid)%longave%rm_ind + sv(grid)%longave%sm_ind
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'hm_ind',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    ! outvar_r(grid) =  sum(sv(grid)%vegvars%sm_ind(:) * sv(grid)%vegvars%nind(:)) +&
-    !                   sum(sv(grid)%vegvars%hm_ind(:) * sv(grid)%vegvars%nind(:))
-    ! outvar_r(grid) = sv(grid)%soilvars%zsno
-    outvar_r(grid) = sv(grid)%longave%zsno
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'height',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-    if (count(sv(grid)%vegvars%present .and. tree(1:npft)) /= 0) then
-      ! outvar_r(grid) = sum(sv(grid)%vegvars%height) / count(sv(grid)%vegvars%present .and. tree(1:npft))
-      ! outvar_r(grid) = maxval(sv(grid)%vegvars%height)
-      outvar_r(grid) = sv(grid)%longave%height
-    else
-      outvar_r(grid) = 0.
-    end if
-
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'fpc_max',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-
-    fpc_grid = sv(grid)%vegvars%fpc_grid
-    meanfpc  = sv(grid)%vegvars%meanfpc
-
-    if (meanfpc(1) == maxval(meanfpc)) outvar_r(grid) = 1.
-    if (meanfpc(2) == maxval(meanfpc)) outvar_r(grid) = 2.
-    if (meanfpc(3) == maxval(meanfpc)) outvar_r(grid) = 3.
-    if (meanfpc(4) == maxval(meanfpc)) outvar_r(grid) = 4.
-    if (meanfpc(5) == maxval(meanfpc)) outvar_r(grid) = 5.
-    if (meanfpc(6) == maxval(meanfpc)) outvar_r(grid) = 6.
-    if (meanfpc(7) == maxval(meanfpc)) outvar_r(grid) = 7.
-    if (meanfpc(8) == maxval(meanfpc)) outvar_r(grid) = 8.
-    if (meanfpc(9) == maxval(meanfpc)) outvar_r(grid) = 9.
-
-    if (sum(meanfpc) < 0.1) outvar_r(grid) = 0.
-
-    if (.not.(sv(grid)%validcell)) outvar_r(grid) = -9999.
-
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt(1)],count=[cnt(1)])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-! -----------------------------------------------------------
-
-ncstat = nf90_inq_varid(ofid,'cover',varid)
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-  do grid = 1, cnt(1)
-
-    outvar_pft(grid,1:npft) = sv(grid)%vegvars%meanfpc
-
-    if (.not.(sv(grid)%validcell)) outvar_pft(grid,:) = -9999.
-  end do
-
-ncstat = nf90_put_var(ofid,varid,outvar_pft,start=[srt(1),1],count=[cnt(1),npft])
-if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-
-!-----------------------------------------------------------
-!
-! ncstat = nf90_inq_varid(ofid,'ForFireMk5',varid)
-! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
-!
-! outvar_r = dayvars(:,1:ndyear)%ForFireMk5
-!
-! ncstat = nf90_put_var(ofid,varid,outvar_r,start=[srt],count=[cnt])
+! ncstat = nf90_open('./output/trash.nc',nf90_nowrite,ofid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)
 ! if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
-!-----------------------------------------------------------
-!-----------------------------------------------------------
-!-----------------------------------------------------------
+ncstat = nf90_inq_varid(ofid,varname,varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
 
-ncstat = nf90_close(ofid)
+ncstat = nf90_put_var(ofid,varid,rvar1d,start=[gridstart,tpos],count=[gridcount,1])
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! deallocate(rvar2d)
+
+!class default
+
+!  write(stdout,*)'error an output data type was requested that is not supported'
+!  stop
+
+!end select
+
+end subroutine putvar1d
+
+!--------------------------------------------
+
+subroutine putvar2d(ofid,tpos,varname,gridstart,gridcount,rvar2d)
+
+use parametersmod, only : i4,sp
+use errormod,      only : ncstat,netcdf_err
+use netcdf
+
+implicit none
+
+integer(i4),                  intent(in) :: ofid
+integer(i4),                  intent(in) :: tpos
+character(*),                 intent(in) :: varname
+integer(i4),                  intent(in) :: gridstart
+integer(i4),                  intent(in) :: gridcount
+real(sp),     dimension(:,:), intent(in) :: rvar2d
+
+! real(sp), allocatable, dimension(:,:) :: rvar2d
+
+integer :: l
+integer :: varid
+
+!-----------------
+
+l = size(rvar2d,dim=2)
+
+! allocate(rvar2d(gridcount,l))
+
+ncstat = nf90_inq_varid(ofid,varname,varid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+ncstat = nf90_put_var(ofid,varid,rvar2d,start=[gridstart,1,tpos],count=[gridcount,l,1])
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+! deallocate(rvar2d)
+
+end subroutine putvar2d
+
+!--------------------------------------------
+
+! subroutine putvar3d(ofid,tpos,varname,gridstart,gridcount,rvar1d)
+!
+! use parametersmod, only : i4,sp
+! use errormod,      only : ncstat,netcdf_err
+! use netcdf
+!
+! implicit none
+!
+! integer(i4),                intent(in) :: ofid
+! integer(i4),                intent(in) :: tpos
+! character(*),               intent(in) :: varname
+! integer(i4),                intent(in) :: gridstart
+! integer(i4),                intent(in) :: gridcount
+! real(sp),     dimension(:), intent(in) :: rvar1d
+!
+! real(sp), allocatable, dimension(:,:) :: rvar2d
+!
+! integer :: varid
+! integer :: i,l
+! integer :: x,y
+!
+! !-----------------
+!
+! l = size(var2d,dim=2)
+!
+! !select type(var2d)
+! !type is (real)
+!
+!   allocate(rvar3d(cntx,cnty,l))
+!
+!   y = 1
+!   do i = 1,size(var2d,dim=1)
+!
+!     x = mod(i,cntx)
+!     y = 1+ i / cntx
+!
+!     if (x==0) then
+!       x = cntx
+!       y = i/cntx
+!     end if
+!
+!     rvar3d(x,y,:) = var2d(i,:)
+!   end do
+!
+!   do i = 1,l
+!     where (.not. cellmask) rvar3d(:,:,i) = rmissing
+!   end do
+!
+!   ncstat = nf90_inq_varid(ofid,varname,varid)
+!   if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+!   ncstat = nf90_put_var(ofid,varid,rvar3d,start=[1,1,1,tpos],count=[cntx,cnty,l,1])
+!   if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+!
+!   deallocate(rvar3d)
+!
+! !class default
+!
+! !  write(stdout,*)'error an output data type was requested that is not supported'
+! !  stop
+!
+! !end select
+!
+! end subroutine putvar3d
+
+!----------------------------------------------------------------------------------------------------------------------------
+
+
+
+subroutine netcdf_open_mpi(file,fid)
+
+use errormod, only : ncstat,netcdf_err
+use netcdf
+use mpi
+
+implicit none
+
+character(*), intent(in)  :: file
+integer,      intent(out) :: fid
+
+ncstat = nf90_open(file,nf90_write,fid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)
 if (ncstat /= nf90_noerr) call netcdf_err(ncstat)
 
+end subroutine netcdf_open_mpi
 
-end subroutine netcdfoutput_onelayer
+!----------------------------------------------------------------------------------------------------------------------------
 
-!---------------------------------------------------------------------
+subroutine netcdf_close(fid)
 
+use errormod, only : ncstat,netcdf_err
+use netcdf
 
+implicit none
 
+integer, intent(in) :: fid
+
+ncstat = nf90_close(fid)
+if (ncstat/=nf90_noerr) call netcdf_err(ncstat)
+
+end subroutine netcdf_close
+
+!----------------------------------------------------------------------------------------------------------------------------
 
 end module netcdfoutputmod

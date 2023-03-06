@@ -21,26 +21,27 @@ type(mpivars), target,               intent(inout) :: info
 integer(i4),           dimension(:), intent(inout) :: srt
 integer(i4),           dimension(:), intent(inout) :: cnt
 
-character(200), pointer :: outfile
-character(200), pointer :: gridlistfile
-character(200), pointer :: cfile_spinup
-character(200), pointer :: cfile_transient
-character(200), pointer :: soilfile
-character(200), pointer :: topofile
-logical,        pointer :: dospinup
-logical,        pointer :: dotransient
-integer(i4),    pointer :: spin_baseyr
-integer(i4),    pointer :: spin_startyr
-integer(i4),    pointer :: spinupyears
-integer(i4),    pointer :: tran_baseyr
-integer(i4),    pointer :: tran_startyr
-integer(i4),    pointer :: transientyears
-integer(i4),    pointer :: ilen
-integer(i4),    pointer :: spin_tlen
-integer(i4),    pointer :: tran_tlen
-character(200), pointer :: timestring
-integer(i4)   , pointer :: outmode
-integer(i4)   , pointer :: nproc
+character(200), pointer               :: outfile
+character(200), pointer               :: gridlistfile
+character(200), pointer               :: cfile_spinup
+character(200), pointer               :: cfile_transient
+character(200), pointer               :: soilfile
+character(200), pointer               :: topofile
+logical,        pointer               :: dospinup
+logical,        pointer               :: dotransient
+integer(i4),    pointer               :: spin_baseyr
+integer(i4),    pointer               :: spin_startyr
+integer(i4),    pointer               :: spinupyears
+integer(i4),    pointer               :: tran_baseyr
+integer(i4),    pointer               :: tran_startyr
+integer(i4),    pointer               :: transientyears
+integer(i4),    pointer               :: ilen
+integer(i4),    pointer               :: spin_tlen
+integer(i4),    pointer               :: tran_tlen
+character(200), pointer               :: timestring
+integer(i4)   , pointer               :: outmode
+integer(i4)   , pointer               :: nproc
+character(40),  pointer, dimension(:) :: outputvar
 
 character(200) :: jobfile
 integer :: ifid
@@ -69,7 +70,8 @@ namelist /joboptions/ &
   spin_baseyr,        &
   spin_startyr,       &
   spinupyears,        &
-  tran_baseyr
+  tran_baseyr,        &
+  outputvar
 !   fixedco2,           &
 !   ocean_uptake,       &
 !   cal_year,           &
@@ -107,11 +109,13 @@ tran_tlen       => info%tran_tlen
 timestring      => info%timestring
 outmode         => info%outmode
 nproc           => info%nproc
+outputvar       => info%outputvar
 
 !--------------------
 ! Initialize variables with a default value if they are not specified in the namelist
 spinupyears    = -9999
 transientyears = 1
+outputvar = 'null'
 ! nspinyrsout    = -9999
 ! nolanduse      = .false.
 ! startyr_foragers = 1000

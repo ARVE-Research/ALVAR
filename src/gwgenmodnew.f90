@@ -20,7 +20,7 @@ contains
 
 subroutine gwgen_new(georndst,tmp,dtr,pre,wet,cld,wnd,nd,tmin,tmax,prec,cldf,wind)
 
-use parametersmod, only : sp,dp,i4,i2,so,ndaymonth
+use parametersmod, only : sp,dp,i4,i2,ndaymonth
 use randomdistmod, only : randomstate
 use newsplinemod,  only : newspline_all
 use weathergenmod, only : metvars_in,metvars_out,weathergen,roundto

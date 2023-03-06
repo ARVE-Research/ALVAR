@@ -13,6 +13,8 @@ integer(i4),   allocatable, dimension(:) :: gruns
 character(50), allocatable, dimension(:) :: textfilenames
 integer(i4)                              :: ngrid
 integer(i4)                              :: outmode
+integer(i4)                              :: ofid
+logical,                  dimension(100) :: outvar_on
 
 contains
 
@@ -28,6 +30,7 @@ use randomdistmod,   only : randomstate
 use statevarsmod,    only : inlon,inlat,time,indx,xlen,ylen,tlen,invars,nd,&
                             mon_metvars,day_metvars,soil_vars,gpp_vars,veg_vars,topo_vars,sv
 use netcdfinputmod,  only : soildatainput,topodatainput
+use netcdfoutputmod, only : netcdf_open_mpi,netcdf_close
 use initmod,         only : initlonlat
 
 implicit none
@@ -97,7 +100,7 @@ call CPU_TIME(start_time)
 
 !-------------------------
 
-outfile         => info%outfile
+outfile         => info%outfile_list
 gridlistfile    => info%gridlistfile
 cfile_spinup    => info%cfile_spinup
 cfile_transient => info%cfile_transient
@@ -116,6 +119,7 @@ spin_tlen       => info%spin_tlen
 tran_tlen       => info%tran_tlen
 
 outmode         =  info%outmode
+outvar_on       =  info%outvar_on
 
 !-------------------------
 ! Create start and count array from the mpi job info
@@ -183,7 +187,11 @@ calcyrs = transientyears
 
 if (dotransient) then
 
+  call netcdf_open_mpi(outfile,ofid)
+
   call alvar(infile,outfile,rank,gridstart,gridcount,baseyr,startyr,calcyrs,spinup)
+
+  call netcdf_close(ofid)
 
 end if
 
@@ -209,7 +217,7 @@ use parametersmod,   only : i4,sp
 use statevarsmod,    only : inlon,inlat,time,indx,xlen,ylen,invars,nd,sv
 use orbitmod,        only : orbitpars,orbit,calcorbitpars
 use netcdfinputmod,  only : metdatainput
-use netcdfoutputmod, only : netcdfoutput,netcdfoutput_onelayer
+use netcdfoutputmod, only : netcdf_output
 use initmod,         only : initdate,initinvars,calcndyear
 use printgridmod,    only : printgrid
 use alvarmod,        only : alvar_annual
@@ -306,8 +314,8 @@ yearloop : do yr = 1, calcyrs
 
   !-------------------------
   ! Output variables into netcdf file in parallel
-  ! if (outmode == 0) call netcdfoutput(outfile,srt,cnt,year,ndyear,nd,sv)
-  if (outmode == 0 .and. yr == calcyrs .and. .not.spinup) call netcdfoutput_onelayer(outfile,srt,cnt,yr,ndyear,nd,sv)
+  if (outmode == 0 .and. .not.spinup) call netcdf_output(ofid,gridstart,gridcount,yr,outvar_on,sv)
+  ! if (outmode == 0 .and. yr == calcyrs .and. .not.spinup) call netcdfoutput_onelayer(outfile,srt,cnt,yr,ndyear,nd,sv)
 
 end do yearloop
 

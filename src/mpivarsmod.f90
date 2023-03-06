@@ -11,11 +11,13 @@ integer :: ofid
 !-------------------------------------------------------
 
 type mpivars
+
   character(200) :: cfile_spinup      ! infile name
   character(200) :: cfile_transient   ! infile name
   character(200) :: soilfile          ! infile name
   character(200) :: topofile          ! infile name
   character(200) :: outfile           ! outfile name
+  character(200) :: outfile_list      ! outile list formmatted name
   character(200) :: gridlistfile      ! gridlist file name
   character(200) :: timestring        ! timestring with startyr/calcyr
   logical        :: dospinup
@@ -31,6 +33,9 @@ type mpivars
   integer(i4)    :: tran_tlen
   integer(i4)    :: outmode           ! output mode: 0 = global ncfile, 1 = grid textfile
   integer(i4)    :: nproc             ! number of processors
+
+  character(40), dimension(100) :: outputvar
+  logical,       dimension(100) :: outvar_on
 
 end type mpivars
 

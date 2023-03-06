@@ -2,7 +2,7 @@ module parametersmod
 
 ! Simple module defining some types and parameters
 
-use iso_fortran_env, only : int8,int16,int32,real32,real64,output_unit
+use iso_fortran_env, only : int8,int16,int32,real32,real64,input_unit,output_unit,error_unit
 
 implicit none
 
@@ -14,7 +14,9 @@ integer, parameter :: i4 = int32   ! 4 byte integer
 integer, parameter :: sp = real32  ! 4 byte real
 integer, parameter :: dp = real64  ! 8 byte real
 
-integer, parameter :: so = output_unit  ! unit number for standard output
+integer, parameter :: stdin  = input_unit
+integer, parameter :: stdout = output_unit
+integer, parameter :: stderr = error_unit
 
 real(sp), parameter :: Tfreeze = 273.15 ! freezing temperature of freshwater (K)
 real(sp), parameter :: Pstd    = 101325.       !Standard pressure  (Pa)
@@ -36,6 +38,10 @@ integer, parameter, dimension(12) :: midday    = [ 16,44,75,105,136,166,197,228,
 
 real(dp),    parameter :: missing_sp = -9999.
 integer(i2), parameter :: missing_i2 = -32768
+
+integer, parameter,  dimension(3) :: lutype = [ 1,2,3 ]  !could eventually be more categories
+
+integer, parameter :: netcdf_baseyr = 1950   ! Reference year for netCDF output time dimension
 
 contains
 

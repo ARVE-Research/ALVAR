@@ -39,6 +39,7 @@ alvar_SOURCES =        \
 	killplantmod.f90     \
 	mortalitymod.f90     \
 	averagemod.f90       \
+	netcdfsetupmod.f90   \
 	netcdfinputmod.f90   \
 	netcdfoutputmod.f90  \
 	printgridmod.f90		 \
@@ -46,6 +47,7 @@ alvar_SOURCES =        \
 	alvarmod.f90         \
 	alvarmod_daily.f90   \
 	drivermod.f90 		   \
+	list2gridmod.f90     \
 	main.f90
 clean-local:
 	rm -r -f *.mod *.dSYM

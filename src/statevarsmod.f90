@@ -341,6 +341,69 @@ end type topo_vars
 
 !---------------------------------------------------------------------
 
+type output_var
+
+  ! Derived type to save variables to their output unit
+  real(sp) :: livebiomass     ! total carbon in living biomass',  'g m-2',
+  real(sp) :: albiomass       ! tcarbon in aboveground biomass',  'g m-2',
+  real(sp) :: litterC_fast    ! fast turnover litter carbon',     'g m-2',
+  real(sp) :: litterC_slow    ! slow turnover litter carbon',     'g m-2',
+  real(sp) :: litterC_bg      ! belowground litter carbon',       'g m-2',
+  real(sp) :: soilC_surf      ! surface soil organic matter',     'g m-2',
+  real(sp) :: soilC_fast      ! fast turnover soil carbon',       'g m-2',
+  real(sp) :: soilC_slow      ! slow turnover soil carbon',       'g m-2',
+  real(sp) :: product_fast    ! fast turnover product pool',      'g m-2 a-1'
+  real(sp) :: product_slow    ! slow turnover product pool',      'g m-2 a-1'
+
+  !fluxes
+  real(sp) :: AET             ! Total actual evapotranspiration',  'mm a-1',    2, 'lon', 'lat'
+  real(sp) :: NPP             ! Annual Net Primary Productivity',  'g m-2 a-1', 2, 'lon', 'lat'
+  real(sp) :: GPP             ! Annual Gross Primary Productivity','g m-2 a-1', 2, 'lon', 'lat'
+  real(sp) :: Rh              ! Annual heterotrophic respiration', 'g m-2 a-1', 2, 'lon', 'lat'
+  real(sp) :: NBP             ! Annual Net Biome Productivity',    'g m-2 a-1', 2, 'lon', 'lat'
+  real(sp), dimension(12) :: mAET            ! monthly actual evapotranspiration','mm month-1',3, 'lon', 'lat', 'month'
+  real(sp) :: PET             ! Potential evapotranspiration',     'mm a-1',    2, 'lon', 'lat'
+  real(sp) :: acflux_fire     ! Carbon emissions from fire',       'g m-2 a-1', 2, 'lon', 'lat'
+  !
+  !other state variables
+  real(sp) :: burnedf         ! fraction of the gridcell burned','fraction',  2, 'lon', 'lat'
+  real(sp) :: treecover
+  real(sp) :: grasscover
+  real(sp), dimension(npft) :: cover           ! PFT cover fraction',             'fraction',  3, 'lon', 'lat', 'pft'
+  real(sp), dimension(npft) :: pftalbiomass    ! carbon in living biomass aboveground', 'g m-2', 3, 'lon', 'lat', 'pft'
+  real(sp), dimension(npft) :: nind            ! PFT individual density',         'ind m-2',   3, 'lon', 'lat', 'pft'
+  real(sp), dimension(npft) :: crownarea       ! PFT crownarea',                  'm-2',       3, 'lon', 'lat', 'pft'
+  real(sp), dimension(nl) :: soilmoisture    ! soil moisture fraction of FC',   'fraction',  3, 'lon', 'lat', 'layer'
+  real(sp), dimension(nl) :: soiltemp        !soil temperature',               'degC',      4, 'lon', 'lat', 'layer', 'time'
+  real(sp) :: aprec           ! Annual total precipitation',     'mm',        2, 'lon', 'lat'
+  !
+  real(sp) :: wood_fast       ! fast turnover product pool carbon','g m-2',   2, 'lon', 'lat'
+  real(sp) :: wood_slow       ! fast turnover product pool carbon','g m-2',   2, 'lon', 'lat'
+  real(sp) :: crop_harvest    ! harvestable crop biomass carbon',  'g m-2',   2, 'lon', 'lat'
+  !
+  real(sp) :: coverfrac        ! cover fraction of tile',           'fraction',3, 'lon', 'lat', 'tile'
+  real(sp) :: tilecarbon       ! total carbon in tile',             'g m-2',   3, 'lon', 'lat', 'tile'
+  real(sp) :: soilerosion      ! total soil erosion over all tiles','ton ha-1',2, 'lon', 'lat'
+  !
+  real(sp) :: fireCO2       ! CO2 emissions from biomass burning','g m-2 a-1',  2, 'lon', 'lat'
+  real(sp) :: fireCO        ! CO emissions from biomass burning', 'g m-2 a-1',  2, 'lon', 'lat'
+  real(sp) :: fireCH4       ! CH4 emissions from biomass burning','g m-2 a-1',  2, 'lon', 'lat'
+  real(sp) :: fireVOC       ! VOC emissions from biomass burning','g m-2 a-1',  2, 'lon', 'lat'
+  real(sp) :: fireTPM       ! TPM emissions from biomass burning','g m-2 a-1',  2, 'lon', 'lat'
+  real(sp) :: fireNOx       ! NOx emissions from biomass burning','g m-2 a-1',  2, 'lon', 'lat'
+  !
+  real(sp) :: foragerPD     ! Population density of foragers',    'persons 100 km-2',2,'lon', 'lat'
+  real(sp), dimension(npft,12) :: mLAI          ! PFT Monthly LAI',                       'm2 m-2',            4, 'lon', 'lat', 'pft', 'month'
+  real(sp), dimension(npft,12) :: mBBpft        ! PFT Monthly biomass burned',            'kg dry matter m-2', 4, 'lon', 'lat', 'pft', 'month'
+  real(sp), dimension(12) :: mburnedf      ! monthly burned fraction of the gridcell','fraction',         3, 'lon', 'lat', 'month'
+  real(sp), dimension(npft) :: height	       ! tree height per pft', 'm', 3, 'lon', 'lat', 'pft'
+  real(sp) :: GDD5
+
+
+end type output_var
+
+!---------------------------------------------------------------------
+
 type long_ave
 
   ! Derived type to save long term average of statevars for output
@@ -372,6 +435,7 @@ type statevars
   type(veg_vars)    :: vegvars
   type(topo_vars)   :: topovars
   type(long_ave)    :: longave
+  type(output_var)  :: outvars
 
   real(dp)          :: lon
   real(dp)          :: lat
